@@ -16,6 +16,17 @@ h1{font-size:1rem;margin:0 .6rem 0 0;white-space:nowrap}
 .tab{background:#444;color:#eee;border:0;padding:.25rem .6rem;border-radius:.3rem;cursor:pointer;font-size:.85rem}
 .tab.on{background:#6b8e23}
 #hver{font-size:.75rem;color:#aaa;white-space:nowrap;margin-left:.4rem}
+#link{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#aaa;white-space:nowrap}
+.bars{display:inline-flex;align-items:flex-end;gap:2px;height:.9rem}
+.bars i{display:block;width:.28rem;background:#444;border-radius:1px}
+.bars i:nth-child(1){height:35%}
+.bars i:nth-child(2){height:65%}
+.bars i:nth-child(3){height:100%}
+.bars i.on{background:#00e5ff}
+#sdr{display:inline-flex;align-items:center;gap:.25rem;color:#666}
+#sdr::before{content:"";width:.55rem;height:.55rem;border-radius:50%;background:#444}
+#sdr.on{color:#7dff8a}
+#sdr.on::before{background:#7dff8a;box-shadow:0 0 .35rem #2cff4f}
 #conn{font-size:.75rem;color:#9a9;white-space:nowrap}
 #conn.bad{color:#e74c3c}
 main{flex:1;min-height:0;min-width:0;padding:.5rem .6rem;overflow:auto}
@@ -64,7 +75,7 @@ select{flex:1;min-width:0}
 input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 #toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:#2e8b57;color:#fff;padding:.5rem 1rem;border-radius:.4rem;font-size:.9rem;box-shadow:0 2px 10px #000}
 @media(max-width:520px){h1{display:none}.grid2{grid-template-columns:1fr}}
-@media(max-width:420px){.lcd{aspect-ratio:2.2/1}.tab{padding:.2rem .4rem}#hver,#conn{font-size:.65rem}}
+@media(max-width:420px){.lcd{aspect-ratio:2.2/1}.tab{padding:.2rem .4rem}#hver,#conn{font-size:.65rem}#rssi{display:none}}
 </style>
 </head>
 <body>
@@ -74,6 +85,7 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 <button class="tab" id="tabSet" onclick="tab('set')">Settings</button>
 <button class="tab" id="tabUpd" onclick="tab('upd')">Update</button>
 <span class="sp"></span>
+<span id="link" title="WLAN signal and SDROxide connection"><span class="bars"><i></i><i></i><i></i></span><span id="rssi"></span><span id="sdr">SDROxide</span></span>
 <span id="hver">FW -</span>
 <span id="conn">connecting...</span>
 </header>
@@ -159,6 +171,10 @@ function render(){
   const s=S;
   $('ver').textContent=s.ver;
   $('hver').textContent='FW '+s.ver;
+  document.querySelectorAll('#link .bars i').forEach((e,k)=>e.classList.toggle('on',k<s.bars));
+  $('rssi').textContent=s.rssi+' dBm';
+  $('sdr').classList.toggle('on',!!s.sdr);
+  $('sdr').title=s.sdr?'SDROxide is connected':'SDROxide is not connected';
   $('qrg').textContent=s.qrg>0?(s.qrg/1e6).toFixed(4):'-.----';
   $('sub').textContent='BAND '+(s.band?s.band+' m':'--')+(s.name?'  |  '+s.name:'');
   const key=s.n+'|'+s.names.slice(0,s.n).join('\u0001');

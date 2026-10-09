@@ -23,7 +23,7 @@ Die Display-Pins stehen in `libraries/TFT_eSPI/User_Setup.h`. Beim ersten Start 
 
 ## Bedienung am Gerät
 
-- **Seite 1** zeigt Frequenz, Band und die Antennenliste. `AUTOMATIC MODE` schaltet zwischen Automatik und Handbetrieb um. Im Handbetrieb wählen UP und DN die Antenne. Hält man `ST` eine Sekunde, wird die aktuelle Antenne für das aktuelle Band gespeichert.
+- **Seite 1** zeigt Frequenz, Band und die Antennenliste. `AUTOMATIC MODE` schaltet zwischen Automatik und Handbetrieb um. Zwischen diesem Schalter und `MISC` stehen zwei Symbole für die Verbindung: im Bluetooth-Modus das Bluetooth-Zeichen (grün, solange ein Client verbunden ist), im WLAN-Modus die Signalstärke (drei Bögen) und ein Bildschirm-Symbol, das grün wird, solange SDROxide verbunden ist. Die Weboberfläche zeigt dasselbe oben rechts. Im Handbetrieb wählen UP und DN die Antenne. Hält man `ST` eine Sekunde, wird die aktuelle Antenne für das aktuelle Band gespeichert.
 - **Seite 2** (`MISC`) zeigt die Verbindung: Modus, SSID, Status, IP, Signal, ob SDROxide verbunden ist, Antenne und Automatik. Hier wird auch der Verbindungsmodus eingestellt.
 
 ## Verbindung: Bluetooth oder WLAN

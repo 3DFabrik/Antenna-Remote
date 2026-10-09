@@ -32,6 +32,8 @@ TFT_eSprite img = TFT_eSprite(&tft);
 #define CALIBRATION_FILE "/TouchCalData1"
 #define REPEAT_CAL false
 #define KEY_X 295  // Center of key
+#define AUTO_CX 98  // The AUTOMATIC button runs from the left edge to x = 196; the link icons sit between it and MISC
+#define AUTO_W 196
 #define NUM_KEYS 7
 String b0_txt = "UP";
 String b1_txt = "ST";
@@ -397,7 +399,7 @@ void loop(void) {
         b_automatic = false;
         writeConfig("b_automatic=false");
         b4_txt = "AUTOMATIC MODE OFF";
-        key[4].initButton(&tft, 130, 20, 260, 30, TFT_WHITE, TFT_GREY, TFT_WHITE, "", 1);
+        key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, TFT_GREY, TFT_WHITE, "", 1);
         Serial.println("b_automatic=false");
       } else {
         b_automatic = true;
@@ -405,7 +407,7 @@ void loop(void) {
         b4_txt = "AUTOMATIC MODE ON";
         sel_antenna();
         tft_update();
-        key[4].initButton(&tft, 130, 20, 260, 30, TFT_WHITE, TFT_DARKGREEN, TFT_WHITE, "", 1);
+        key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, TFT_DARKGREEN, TFT_WHITE, "", 1);
         key[4].drawButton(false, b4_txt);
         Serial.println("b_automatic=true");
       }
@@ -466,6 +468,7 @@ void loop(void) {
     delay(10);
     sendalivemessage();
     if (n_disp_page == 2) { tft_update(); }  // keeps the connection state current
+    if (n_disp_page == 1) { drawLinkStatus(false); }
   }
 }
 
@@ -919,7 +922,7 @@ void setAutomatic(bool on) {
     sel_antenna();
     tft_update();
   }
-  key[4].initButton(&tft, 130, 20, 260, 30, TFT_WHITE, on ? TFT_DARKGREEN : TFT_GREY, TFT_WHITE, "", 1);
+  key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, on ? TFT_DARKGREEN : TFT_GREY, TFT_WHITE, "", 1);
   sendalivemessage();
   if (n_disp_page == 1) drawButtons_p1();
 }
@@ -971,7 +974,8 @@ String stateJson() {
   String o = "{\"ant\":" + String(antenna_selected) + ",\"auto\":" + String(b_automatic ? 1 : 0) + ",\"n\":" + String(n);
   o += ",\"trx\":" + String(TRX_address) + ",\"qrg\":" + String(hz) + ",\"band\":" + String(BAND) + ",\"ver\":" + jsonStr(fwVersion);
   o += ",\"name\":" + jsonStr(ANT) + ",\"names\":" + namesJson();
-  o += ",\"tuneExt\":" + String(digitalRead(TUNE_EXT_pin)) + ",\"tuning\":" + String(digitalRead(TUNE_REQ_pin)) + "}";
+  o += ",\"tuneExt\":" + String(digitalRead(TUNE_EXT_pin)) + ",\"tuning\":" + String(digitalRead(TUNE_REQ_pin));
+  o += ",\"rssi\":" + String(WiFi.RSSI()) + ",\"bars\":" + String(wifiRssiBars()) + ",\"sdr\":" + String((rigClient && rigClient.connected()) ? 1 : 0) + "}";
   return o;
 }
 
@@ -1477,13 +1481,14 @@ void drawButtons_p1() {
   tft.setTextFont(2);
   key[4].setLabelDatum(0, 5, MC_DATUM);
   if (b_automatic == true) {
-    key[4].initButton(&tft, 130, 20, 260, 30, TFT_WHITE, TFT_DARKGREEN, TFT_WHITE, "", 1);  // MODE button
+    key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, TFT_DARKGREEN, TFT_WHITE, "", 1);  // MODE button
     key[4].drawButton(false, "AUTOMATIC MODE ON");
   } else {
-    key[4].initButton(&tft, 130, 20, 260, 30, TFT_WHITE, TFT_GREY, TFT_WHITE, "", 1);  // MODE button
+    key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, TFT_GREY, TFT_WHITE, "", 1);  // MODE button
     key[4].drawButton(false, "AUTOMATIC MODE OFF");
   }
 
+  drawLinkStatus(true);
   tft.setTextColor(TFT_WHITE, COLOR_BG);
 }
 
@@ -1580,6 +1585,92 @@ void send2shftreg(int data) {
 }
 
 // ************************************************ NETWORK ********************************************************************************
+// ************************************************ Link icons (from RotorControl) ***********************************************
+uint32_t lastLinkKey = 0xFFFFFFFF;
+
+// Signal strength in three steps, the same thresholds as RotorControl.
+int wifiRssiBars() {
+  if (WiFi.status() != WL_CONNECTED) return 0;
+  int r = WiFi.RSSI();
+  if (r >= -55) return 3;
+  if (r >= -70) return 2;
+  if (r >= -85) return 1;
+  return 0;
+}
+
+static void drawFanArc(int cx, int cy, int r, uint16_t color) {
+  float t = -0.75f;
+  int x0 = cx + (int)(r * sin(t));
+  int y0 = cy - (int)(r * cos(t));
+  for (int i = 1; i <= 8; i++) {
+    t = -0.75f + (1.5f * i) / 8.0f;
+    int x = cx + (int)(r * sin(t));
+    int y = cy - (int)(r * cos(t));
+    tft.drawLine(x0, y0, x, y, color);
+    tft.drawLine(x0 + 1, y0, x + 1, y, color);
+    x0 = x;
+    y0 = y;
+  }
+}
+
+static void drawBtIcon(int x, int y, uint16_t color) {
+  int cx = x + 6;
+  int y0 = y;
+  int y1 = y + 16;
+  int ym = y + 8;
+  int r = x + 12;
+  tft.drawLine(cx, y0, cx, y1, color);
+  tft.drawLine(cx + 1, y0, cx + 1, y1, color);
+  tft.drawLine(cx, y0, r, y0 + 4, color);
+  tft.drawLine(r, y0 + 4, cx, ym, color);
+  tft.drawLine(cx, ym, r, y1 - 4, color);
+  tft.drawLine(r, y1 - 4, cx, y1, color);
+  tft.drawLine(x, y0 + 4, r, y1 - 4, color);
+  tft.drawLine(x, y1 - 4, r, y0 + 4, color);
+}
+
+static void drawWifiIcon(int cx, int cy, bool connected, int bars, uint16_t color) {
+  uint16_t dim = TFT_DARKGREY;
+  tft.fillCircle(cx, cy, 2, color);
+  drawFanArc(cx, cy, 6, (connected && bars >= 1) ? color : dim);
+  drawFanArc(cx, cy, 11, (connected && bars >= 2) ? color : dim);
+  drawFanArc(cx, cy, 16, (connected && bars >= 3) ? color : dim);
+}
+
+static void drawRcIcon(int x, int y, bool connected) {  // small monitor: filled green while SDROxide is connected
+  uint16_t col = connected ? TFT_GREEN : TFT_DARKGREY;
+  tft.drawRoundRect(x, y, 18, 12, 2, col);
+  if (connected) tft.fillRect(x + 3, y + 3, 12, 6, col);
+  tft.drawFastVLine(x + 9, y + 12, 3, col);
+  tft.drawFastHLine(x + 4, y + 15, 10, col);
+}
+
+// The two icons between the AUTOMATIC button and MISC on page 1: in Bluetooth mode the Bluetooth sign (green while a
+// client is connected), in WLAN mode the signal strength and the monitor for SDROxide. Redrawn only when something changes.
+void drawLinkStatus(bool force) {
+  if (n_disp_page != 1) return;
+  bool btCli = bt_active && SerialBT.hasClient();
+  bool wifiOn = b_wifi_on;
+  int st = wifiOn ? (int)WiFi.status() : (int)WL_DISCONNECTED;
+  bool wifiOk = (st == WL_CONNECTED);
+  int bars = wifiOk ? wifiRssiBars() : 0;
+  bool rcCli = wifiOn && servers_started && rigClient && rigClient.connected();
+  uint32_t key = (wifiOn ? 1u : 0u) | (wifiOk ? 2u : 0u) | ((uint32_t)(bars & 3) << 2) | (btCli ? 16u : 0u) | (rcCli ? 32u : 0u) | ((uint32_t)st << 8);
+  if (!force && key == lastLinkKey) return;
+  lastLinkKey = key;
+
+  tft.fillRect(198, 2, 70, 36, COLOR_BG);
+  if (wifiOn) {
+    uint16_t col = TFT_CYAN;
+    if (!wifiOk && (st == WL_CONNECT_FAILED || st == WL_NO_SSID_AVAIL)) col = TFT_ORANGE;
+    else if (!wifiOk) col = TFT_YELLOW;
+    drawWifiIcon(214, 31, wifiOk, bars, col);
+    drawRcIcon(240, 11, rcCli);
+  } else {
+    drawBtIcon(216, 11, btCli ? TFT_GREEN : TFT_CYAN);
+  }
+}
+
 void loadWifiCreds() {
   netPrefs.begin("net", false);
   wifi_ssid = netPrefs.getString("ssid", "");
