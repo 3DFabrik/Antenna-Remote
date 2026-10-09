@@ -61,8 +61,9 @@ Das Protokoll ist Text über TCP, Port 4540, eine Zeile pro Befehl. Es kommt imm
 | `v` | `AntennaRemote 1` und `RPRT 0` |
 | `F <Hz>` | `RPRT 0` (Frequenz des Radios in Hertz) |
 | `s` | `ant=<1-8> auto=<0\|1> band=<m> name=<Text>` und `RPRT 0` |
+| `M <0\|1>` | `RPRT 0` (Automatik aus oder ein, ab Version 1.1.0) |
 
-Alles andere beantwortet der Umschalter mit `RPRT -1`.
+Alles andere beantwortet der Umschalter mit `RPRT -1`. SDROxide zeigt die aktive Antenne und einen Schalter für die Automatik in der Kopfleiste (Box `ANT SW`).
 
 ## Windows-Programm
 

@@ -1728,8 +1728,17 @@ void rigHandle(String line) {
       rigSetFreq(hz);
       out = "RPRT 0\n";
     }
+  } else if (line.startsWith("M ")) {  // automatic mode off / on
+    String v = line.substring(2);
+    v.trim();
+    if (v == "0" || v == "1") {
+      setAutomatic(v == "1");
+      out = "RPRT 0\n";
+    } else {
+      out = "RPRT -1\n";
+    }
   } else {
-    out = "RPRT -1\n";  // includes the reserved A and M commands
+    out = "RPRT -1\n";  // includes the reserved A command
   }
   rigClient.print(out);
 }
