@@ -54,16 +54,17 @@ Es gibt kein Passwort, der Umschalter gehört ins Heimnetz. Änderungen nimmt er
 
 In SDROxide unter Settings → Radio den Haken `Use Antenna Remote` setzen und unter Settings → Servers die IP-Adresse des Umschalters eintragen. SDROxide zeigt dort, ob die Verbindung steht, und schickt die Frequenz des Radios. Die Automatik des Umschalters wählt danach die Antenne.
 
-Das Protokoll ist Text über TCP, Port 4540, eine Zeile pro Befehl. Es kommt immer nur ein Client zum Zug. Ein weiterer wird abgewiesen, und ein Client, der länger als fünf Sekunden schweigt, wird getrennt.
+Das Protokoll ist Text über TCP, Port 4540, eine Zeile pro Befehl. Es kommt immer nur ein Client zum Zug. Ein weiterer wird abgewiesen, solange der erste mindestens einmal in zwei Sekunden fragt. Schweigt er länger, übernimmt ein neuer Client die Verbindung, nach fünf Sekunden Stille wird er getrennt.
 
 | Anfrage | Antwort |
 | --- | --- |
 | `v` | `AntennaRemote 1` und `RPRT 0` |
 | `F <Hz>` | `RPRT 0` (Frequenz des Radios in Hertz) |
-| `s` | `ant=<1-8> auto=<0\|1> band=<m> name=<Text>` und `RPRT 0` |
+| `s` | `ant=<1-8> auto=<0\|1> band=<m> n=<Anzahl> name=<Text>` und `RPRT 0` |
 | `M <0\|1>` | `RPRT 0` (Automatik aus oder ein, ab Version 1.1.0) |
+| `A <n>` | `RPRT 0` (Antenne `n` wählen und auf Handbetrieb schalten, ab Version 1.2.0) |
 
-Alles andere beantwortet der Umschalter mit `RPRT -1`. SDROxide zeigt die aktive Antenne und einen Schalter für die Automatik in der Kopfleiste (Box `ANT SW`).
+Alles andere beantwortet der Umschalter mit `RPRT -1`. SDROxide zeigt die aktive Antenne, einen Schalter für die Automatik und im Handbetrieb Tasten zum Weiterschalten in der Kopfleiste (Box `ANT SW`).
 
 ## Windows-Programm
 

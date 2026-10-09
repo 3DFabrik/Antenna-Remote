@@ -64,6 +64,7 @@ String hintText = "";
 // Remote protocol "AntennaRemote 1" for SDROxide: text lines on TCP, see crates/sdroxide-types/src/antremote.rs
 const uint16_t RIG_PORT = 4540;
 const unsigned long RIG_IDLE_MS = 5000;  // SDROxide polls once a second; silence this long means the client is gone
+const unsigned long RIG_REPLACE_MS = 2000;  // a newcomer takes over from a client quiet for this long
 WiFiServer rigServer(RIG_PORT);
 WiFiClient rigClient;
 String rigLine = "";
@@ -1608,6 +1609,7 @@ void startWifi() {
   WiFi.onEvent(onWifiEvent);
   WiFi.setHostname("AntennaRemote");
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);  // modem sleep makes a reply wait for the next beacon, and SDROxide gives up after a few seconds
   WiFi.setAutoReconnect(true);
   server.on("/", handleRoot);
   server.on("/readADC", handleADC);
@@ -1689,9 +1691,12 @@ void rigPoll() {
 
   WiFiClient c = rigServer.available();
   if (c) {
-    if (rigClient && rigClient.connected()) {
-      c.stop();  // one client at a time; SDROxide reports this as "busy"
+    // SDROxide asks once a second, so a client quiet for two seconds is a dead connection that has not
+    // been closed yet, and the one now knocking is the same program coming back: let it in.
+    if (rigClient && rigClient.connected() && millis() - rigLastSeen < RIG_REPLACE_MS) {
+      c.stop();  // a live client: one at a time, SDROxide reports this as "busy"
     } else {
+      if (rigClient) rigClient.stop();
       rigClient = c;
       rigLine = "";
       rigLastSeen = millis();
@@ -1719,7 +1724,7 @@ void rigHandle(String line) {
   if (line == "v") {
     out = "AntennaRemote 1\nRPRT 0\n";
   } else if (line == "s") {
-    out = "ant=" + String(antenna_selected) + " auto=" + String(b_automatic ? 1 : 0) + " band=" + String(BAND) + " name=" + ANT + "\nRPRT 0\n";
+    out = "ant=" + String(antenna_selected) + " auto=" + String(b_automatic ? 1 : 0) + " band=" + String(BAND) + " n=" + String(constrain(n_ant_max, 1, 8)) + " name=" + ANT + "\nRPRT 0\n";
   } else if (line.startsWith("F ")) {
     unsigned long hz = strtoul(line.c_str() + 2, NULL, 10);
     if (hz == 0) {
@@ -1727,6 +1732,16 @@ void rigHandle(String line) {
     } else {
       rigSetFreq(hz);
       out = "RPRT 0\n";
+    }
+  } else if (line.startsWith("A ")) {  // choose an antenna by hand: manual mode with it
+    int n = line.substring(2).toInt();
+    if (n >= 1 && n <= constrain(n_ant_max, 1, 8)) {
+      setAutomatic(false);
+      antenna_selected = n;
+      sel_antenna();
+      out = "RPRT 0\n";
+    } else {
+      out = "RPRT -1\n";
     }
   } else if (line.startsWith("M ")) {  // automatic mode off / on
     String v = line.substring(2);
@@ -1738,7 +1753,7 @@ void rigHandle(String line) {
       out = "RPRT -1\n";
     }
   } else {
-    out = "RPRT -1\n";  // includes the reserved A command
+    out = "RPRT -1\n";
   }
   rigClient.print(out);
 }
