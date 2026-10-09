@@ -1664,10 +1664,10 @@ void drawLinkStatus(bool force) {
     uint16_t col = TFT_CYAN;
     if (!wifiOk && (st == WL_CONNECT_FAILED || st == WL_NO_SSID_AVAIL)) col = TFT_ORANGE;
     else if (!wifiOk) col = TFT_YELLOW;
-    drawWifiIcon(214, 31, wifiOk, bars, col);
-    drawRcIcon(240, 11, rcCli);
+    drawWifiIcon(216, 26, wifiOk, bars, col);
+    drawRcIcon(242, 11, rcCli);
   } else {
-    drawBtIcon(216, 11, btCli ? TFT_GREEN : TFT_CYAN);
+    drawBtIcon(227, 11, btCli ? TFT_GREEN : TFT_CYAN);
   }
 }
 
