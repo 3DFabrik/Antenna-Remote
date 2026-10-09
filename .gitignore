@@ -1,0 +1,8 @@
+build/
+firmware/
+*.elf
+*.bin
+*.hex
+*.map
+.vscode/
+*.tmp
