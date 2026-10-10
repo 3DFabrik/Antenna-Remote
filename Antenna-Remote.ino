@@ -227,6 +227,8 @@ const int CLK_pin = 27;  // CLK-Pin of the 74HC164
 const int TUNE_EXT_pin = 33;
 const int TUNE_REQ_pin = 32;
 bool tuning = false;
+unsigned long tuneStart = 0;
+const unsigned long TUNE_MS = 5000;  // a tune request is latched this long, then dropped
 bool tuner = false;
 int antenna_driven = 0;  // antenna the shift register currently holds
 
@@ -320,6 +322,8 @@ void loop(void) {
   }
   wifiTick();
 
+  if (tuning && millis() - tuneStart >= TUNE_MS) setTuning(false);
+
   if (TRX_address >= 1) geticomdata();
   if (newData2) {
     // Neue Daten verarbeiten oder anzeigen
@@ -390,28 +394,14 @@ void loop(void) {
           }
         }
         if (key[2].justReleased()) { key[2].drawButton(false, b2_txt); }
+      } else {
+        tft.setTextFont(4);
+        if (key[1].justPressed() && digitalRead(TUNE_EXT_pin)) setTuning(!tuning);  // TU Button: one press latches the request for TUNE_MS, holding the finger on it changes nothing
+        if (key[1].justReleased()) { drawKeyB1(); }
       }
     }
 
-    if (n_disp_page == 1 && key[4].justPressed()) {  // MODE Button
-      tft.setTextFont(2);
-      if (b_automatic == true) {
-        b_automatic = false;
-        writeConfig("b_automatic=false");
-        b4_txt = "AUTOMATIC MODE OFF";
-        key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, TFT_GREY, TFT_WHITE, "", 1);
-        Serial.println("b_automatic=false");
-      } else {
-        b_automatic = true;
-        writeConfig("b_automatic=true");
-        b4_txt = "AUTOMATIC MODE ON";
-        sel_antenna();
-        tft_update();
-        key[4].initButton(&tft, AUTO_CX, 20, AUTO_W, 30, TFT_WHITE, TFT_DARKGREEN, TFT_WHITE, "", 1);
-        key[4].drawButton(false, b4_txt);
-        Serial.println("b_automatic=true");
-      }
-    }
+    if (n_disp_page == 1 && key[4].justPressed()) { setAutomatic(!b_automatic); }  // MODE Button
     if (n_disp_page == 1 && key[4].justReleased()) {
       tft.setTextFont(2);
       key[4].drawButton(false, b4_txt);
@@ -465,7 +455,6 @@ void loop(void) {
   if (millis() - aliveMillis >= aliveintervall) {  // here an alive message will be triggered every 1000ms
     aliveMillis = millis();
     getqrg();  //Request QRG from the TRX
-    delay(10);
     sendalivemessage();
     if (n_disp_page == 2) { tft_update(); }  // keeps the connection state current
     if (n_disp_page == 1) { drawLinkStatus(false); }
@@ -481,18 +470,15 @@ void sendalivemessage() {
   if (bt_active) { SerialBT.println(alivemsg); }
 }
 
-void recvWithStartEndMarkers() {
-  static boolean recvInProgress = false;
+void recvFromStream(Stream& port) {  // one frame <...> shared by both ports, so the state is static
+  static bool recvInProgress = false;
   static byte ndx = 0;
-  char startMarker = '<';
-  char endMarker = '>';
-  char rc;
 
-  while (Serial.available() > 0 && newData == false) {
-    rc = Serial.read();
+  while (port.available() > 0 && newData == false) {
+    char rc = port.read();
 
-    if (recvInProgress == true) {
-      if (rc != endMarker) {
+    if (recvInProgress) {
+      if (rc != '>') {
         receivedChars[ndx] = rc;
         ndx++;
         if (ndx >= numChars) {
@@ -504,35 +490,18 @@ void recvWithStartEndMarkers() {
         ndx = 0;
         newData = true;
       }
-    } else if (rc == startMarker) {
-      recvInProgress = true;
-    }
-  }
-
-  while (bt_active && SerialBT.available() > 0 && newData == false) {
-    rc = SerialBT.read();
-
-    if (recvInProgress == true) {
-      if (rc != endMarker) {
-        receivedChars[ndx] = rc;
-        ndx++;
-        if (ndx >= numChars) {
-          ndx = numChars - 1;
-        }
-      } else {
-        receivedChars[ndx] = '\0';  // terminate the string
-        recvInProgress = false;
-        ndx = 0;
-        newData = true;
-      }
-    } else if (rc == startMarker) {
+    } else if (rc == '<') {
       recvInProgress = true;
     }
   }
 }
 
+void recvWithStartEndMarkers() {
+  recvFromStream(Serial);
+  if (bt_active) recvFromStream(SerialBT);
+}
+
 void parseData() {  // split the data into its parts
-  bool B_EXIT = false;
   char* strtokIndx;  // this is used by strtok() as an index
 
   strtokIndx = strtok(tempChars, ",");  // get the first part - the string
@@ -541,13 +510,13 @@ void parseData() {  // split the data into its parts
   String CSTRING = String(SRX_TYPE);
   if (CSTRING == "QRG") {
     strtokIndx = strtok(NULL, ",");
+    if (strtokIndx == NULL) return;
     RX_FREQ = atof(strtokIndx);  // convert to float
     sel_band(RX_FREQ);
     QRG = RX_FREQ;
     tft_update();
-    B_EXIT = true;
+    return;
   }
-  if (B_EXIT == true) return;
 
   String address = CSTRING;
   strtokIndx = strtok(NULL, ",");
@@ -582,107 +551,15 @@ void parseData() {  // split the data into its parts
     sel_antenna();
   }
 
-  // ******************************************Receive and store antenna names
-  if (address == "A1NAME") {
-    A1NAME = setvalue;  // convert this part to a String
+  // Stored settings: antenna names, antenna per band, antenna count, TRX address, tuner bits
+  if (isStoredKey(address)) {
     writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A2NAME") {
-    A2NAME = setvalue;  // convert this part to a String
-    writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A3NAME") {
-    A3NAME = setvalue;  // convert this part to a String
-    writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A4NAME") {
-    A4NAME = setvalue;  // convert this part to a String
-    writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A5NAME") {
-    A5NAME = setvalue;  // convert this part to a String
-    writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A6NAME") {
-    A6NAME = setvalue;  // convert this part to a String
-    writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A7NAME") {
-    A7NAME = setvalue;  // convert this part to a String
-    writeConfig(address + "=" + setvalue);
-  }
-  if (address == "A8NAME") {
-    A8NAME = setvalue;
-    writeConfig(address + "=" + setvalue);
-  }
-
-  // ******************************************Receive and store Antenna 2 Band assignment
-  if (address == "a160m") {
-    writeConfig(address + "=" + setvalue);
-    a160m = setvalue.toInt();
-  }
-  if (address == "a80m") {
-    writeConfig(address + "=" + setvalue);
-    a80m = setvalue.toInt();
-  }
-  if (address == "a60m") {
-    writeConfig(address + "=" + setvalue);
-    a60m = setvalue.toInt();
-  }
-  if (address == "a40m") {
-    writeConfig(address + "=" + setvalue);
-    a40m = setvalue.toInt();
-  }
-  if (address == "a30m") {
-    writeConfig(address + "=" + setvalue);
-    a30m = setvalue.toInt();
-  }
-  if (address == "a20m") {
-    writeConfig(address + "=" + setvalue);
-    a20m = setvalue.toInt();
-  }
-  if (address == "a17m") {
-    writeConfig(address + "=" + setvalue);
-    a17m = setvalue.toInt();
-  }
-  if (address == "a15m") {
-    writeConfig(address + "=" + setvalue);
-    a15m = setvalue.toInt();
-  }
-  if (address == "a12m") {
-    writeConfig(address + "=" + setvalue);
-    a12m = setvalue.toInt();
-  }
-  if (address == "a10m") {
-    writeConfig(address + "=" + setvalue);
-    a10m = setvalue.toInt();
-  }
-  if (address == "a6m") {
-    writeConfig(address + "=" + setvalue);
-    a6m = setvalue.toInt();
-  }
-  if (address == "a4m") {
-    writeConfig(address + "=" + setvalue);
-    a4m = setvalue.toInt();
-  }
-  if (address == "n_ant_max") {
-    writeConfig(address + "=" + setvalue);
-    n_ant_max = setvalue.toInt();
-  }
-  if (address == "TRX_address") {
-    writeConfig(address + "=" + setvalue);
-    TRX_address = byte(setvalue.toInt());
+    if (address == "TUNEROFF") sel_antenna();
   }
 
   if (address == "b_automatic") { setAutomatic(!b_automatic); }
 
-  if (address == "TUNEROFF") {
-    TUNEROFF = setvalue;
-    writeConfig("TUNEROFF=" + setvalue);
-    //Serial.println("TUNEROFF RECEIVED");
-    sel_antenna();
-  }
-  if (address == "TUNE") { setTuning(!tuning); }
+  if (address == "TUNE" && digitalRead(TUNE_EXT_pin)) { setTuning(!tuning); }
   if (address == "TUNR") { setTuner(!tuner); }
   if (address == "sendconfig") { sendConfig(); }
   if (address == "reboot") { ESP.restart(); }
@@ -831,6 +708,27 @@ void sendConfig() {
   }
 }
 
+bool isStoredKey(const String& key) {
+  if (key == "n_ant_max" || key == "TRX_address" || key == "TUNEROFF") return true;
+  for (int i = 0; i < 8; i++)
+    if (key == "A" + String(i + 1) + "NAME") return true;
+  for (int i = 0; i < 12; i++)
+    if (key == BAND_KEY[i]) return true;
+  return false;
+}
+
+void applyConfigKey(const String& key, const String& value) {
+  if (key == "b_wifi_on" && (value == "true" || value == "false")) b_wifi_on = (value == "true");
+  if (key == "b_automatic" && (value == "true" || value == "false")) b_automatic = (value == "true");
+  if (key == "TUNEROFF") TUNEROFF = value;
+  if (key == "n_ant_max") n_ant_max = value.toInt();
+  if (key == "TRX_address") TRX_address = byte(value.toInt());
+  for (int i = 0; i < 8; i++)
+    if (key == "A" + String(i + 1) + "NAME") *antNames[i] = value;
+  for (int i = 0; i < 12; i++)
+    if (key == BAND_KEY[i]) *bandAnt[i] = value.toInt();
+}
+
 void readConfig() {
 
   if (!SPIFFS.exists("/config.txt")) {
@@ -840,82 +738,97 @@ void readConfig() {
   if (!file) {
     Serial.println("Fehler beim Öffnen der Konfigurationsdatei");
     return;
-  } else {
   }
 
   while (file.available()) {
     String line = file.readStringUntil('\n');
+    line.trim();
     int equalIndex = line.indexOf('=');
     if (equalIndex != -1) {
       String key = line.substring(0, equalIndex);
       String value = line.substring(equalIndex + 1);
-
-      if ((key == "b_wifi_on") && (value == "true")) { b_wifi_on = true; }
-      if ((key == "b_wifi_on") && (value == "false")) { b_wifi_on = false; }
-      if ((key == "b_automatic") && (value == "true")) { b_automatic = true; }
-      if ((key == "b_automatic") && (value == "false")) { b_automatic = false; }
-      if (key == "a160m") { a160m = value.toInt(); }
-      if (key == "a80m") { a80m = value.toInt(); }
-      if (key == "a60m") { a60m = value.toInt(); }
-      if (key == "a40m") { a40m = value.toInt(); }
-      if (key == "a30m") { a30m = value.toInt(); }
-      if (key == "a20m") { a20m = value.toInt(); }
-      if (key == "a17m") { a17m = value.toInt(); }
-      if (key == "a15m") { a15m = value.toInt(); }
-      if (key == "a12m") { a12m = value.toInt(); }
-      if (key == "a10m") { a10m = value.toInt(); }
-      if (key == "a6m") { a6m = value.toInt(); }
-      if (key == "a4m") { a4m = value.toInt(); }
-      if (key == "A1NAME") { A1NAME = value; }
-      if (key == "A2NAME") { A2NAME = value; }
-      if (key == "A3NAME") { A3NAME = value; }
-      if (key == "A4NAME") { A4NAME = value; }
-      if (key == "A5NAME") { A5NAME = value; }
-      if (key == "A6NAME") { A6NAME = value; }
-      if (key == "A7NAME") { A7NAME = value; }
-      if (key == "A8NAME") { A8NAME = value; }
-      if (key == "TUNEROFF") { TUNEROFF = value; }
-      if (key == "n_ant_max") { n_ant_max = value.toInt(); }
-      if (key == "TRX_address") { TRX_address = byte(value.toInt()); }
+      applyConfigKey(key, value);
       if (b_booting) { tft.println("Key " + key + " value =" + value); }
     }
   }
   file.close();
 }
 
-void writeConfig(const String& configString) {
-  String key = configString.substring(0, configString.indexOf('='));
-  String updatedContent = "";
+// Position of the line "key=..." in text (lines end in \n), or -1.
+int findConfigLine(const String& text, const String& key) {
+  String prefix = key + "=";
+  int at = 0;
+  while (at < (int)text.length()) {
+    if (text.startsWith(prefix, at)) return at;
+    int end = text.indexOf('\n', at);
+    if (end < 0) break;
+    at = end + 1;
+  }
+  return -1;
+}
 
-  // Durchlaufe die Konfigurationsdatei und erstelle eine neue Version ohne vorhandene Einträge des Schlüssels
+// Each batch line ("key=value\n") replaces its old line in place; the file is only written when its content changes.
+void writeConfigBatch(const String& batchIn) {
+  String batch = batchIn;
+  batch.replace("\r", "");
+  if (!batch.endsWith("\n")) batch += "\n";
+  String pending = batch;  // lines not placed in the file yet
+  String original = "";
+  String updated = "";
+
   File file = SPIFFS.open("/config.txt", "r");
   if (file) {
     while (file.available()) {
       String line = file.readStringUntil('\n');
-      if (!line.startsWith(key + "=")) {
-        updatedContent += line + "\n";
+      line.trim();
+      if (line.length() == 0) continue;
+      original += line + "\n";
+      int eq = line.indexOf('=');
+      String key = (eq >= 0) ? line.substring(0, eq) : line;
+      int at = findConfigLine(pending, key);
+      if (at >= 0) {
+        int end = pending.indexOf('\n', at);
+        updated += pending.substring(at, end + 1);
+        pending.remove(at, end - at + 1);
+      } else if (findConfigLine(batch, key) < 0) {
+        updated += line + "\n";  // not touched by the batch; a repeated key that was already replaced is dropped
       }
     }
     file.close();
   }
+  updated += pending;
 
-  // Füge den neuen Eintrag immer hinzu
-  updatedContent += configString + "\n";
-
-  // Überschreibe die Konfigurationsdatei mit der aktualisierten Version
-  file = SPIFFS.open("/config.txt", "w");
-  if (file) {
-    file.print(updatedContent);
+  if (updated != original) {
+    file = SPIFFS.open("/config.txt", "w");
+    if (!file) {
+      Serial.println("Fehler beim Aktualisieren der Konfigurationsdatei");
+      return;
+    }
+    file.print(updated);
     file.close();
-    readConfig();
-  } else {
-    Serial.println("Fehler beim Aktualisieren der Konfigurationsdatei");
   }
+
+  int at = 0;
+  while (at < (int)batch.length()) {
+    int end = batch.indexOf('\n', at);
+    String line = batch.substring(at, end);
+    int eq = line.indexOf('=');
+    if (eq > 0) applyConfigKey(line.substring(0, eq), line.substring(eq + 1));
+    at = end + 1;
+  }
+}
+
+void writeConfig(const String& configString) {
+  String line = configString;
+  line.replace("\r", "");
+  line.replace("\n", "");
+  writeConfigBatch(line);
 }
 
 void setAutomatic(bool on) {
   if (b_automatic == on) return;
   b_automatic = on;
+  if (tuning) setTuning(false);
   writeConfig(on ? "b_automatic=true" : "b_automatic=false");
   b4_txt = on ? "AUTOMATIC MODE ON" : "AUTOMATIC MODE OFF";
   if (on) {
@@ -929,7 +842,9 @@ void setAutomatic(bool on) {
 
 void setTuning(bool on) {
   tuning = on;
+  if (on) tuneStart = millis();
   digitalWrite(TUNE_REQ_pin, on ? HIGH : LOW);
+  if (n_disp_page == 1 && b_automatic) drawKeyB1();
   sendalivemessage();
 }
 
@@ -1151,7 +1066,7 @@ void handleTuner() {
 
 void handleTune() {
   if (!webGuard()) return;
-  if (TRX_address != 0 && digitalRead(TUNE_EXT_pin)) setTuning(server.arg("v") == "1");
+  if (digitalRead(TUNE_EXT_pin)) setTuning(server.arg("v") == "1");
   sendJson(stateJson());
 }
 
@@ -1199,32 +1114,6 @@ void handleReset() {  // factory values, but the unit stays in WLAN mode or it c
   sendJson("{\"ok\":1}");
   delay(300);
   ESP.restart();
-}
-
-// All lines of the batch replace their old versions in a single write of the file.
-void writeConfigBatch(const String& batch) {
-  String updated = "";
-  File file = SPIFFS.open("/config.txt", "r");
-  if (file) {
-    while (file.available()) {
-      String line = file.readStringUntil('\n');
-      if (line.length() == 0) continue;
-      int eq = line.indexOf('=');
-      String key = (eq >= 0) ? line.substring(0, eq) : line;
-      if (batch.startsWith(key + "=") || batch.indexOf("\n" + key + "=") >= 0) continue;
-      updated += line + "\n";
-    }
-    file.close();
-  }
-  updated += batch;
-  file = SPIFFS.open("/config.txt", "w");
-  if (file) {
-    file.print(updated);
-    file.close();
-    readConfig();
-  } else {
-    Serial.println("Fehler beim Aktualisieren der Konfigurationsdatei");
-  }
 }
 
 void handleADC() {
@@ -1411,14 +1300,9 @@ void sel_antenna() {
   int intValue = TUNEROFF.toInt();
   int bitPosition = antenna_selected - 1;
   int bitValue = (intValue >> bitPosition) & 1;
-  if (bitValue == 1) {
-    digitalWrite(TUNE_EXT_pin, HIGH);
-    delay(1);
-  }
-  if (bitValue == 0) {
-    digitalWrite(TUNE_EXT_pin, LOW);
-    delay(1);
-  }
+  bool extChanged = digitalRead(TUNE_EXT_pin) != bitValue;
+  digitalWrite(TUNE_EXT_pin, bitValue ? HIGH : LOW);
+  if (extChanged && !b_booting && n_disp_page == 1) drawKeyB1();  // TU is greyed out without the external tuner
 
 
   String AntArray[] = { A1NAME, A2NAME, A3NAME, A4NAME, A5NAME, A6NAME, A7NAME, A8NAME };
@@ -1429,6 +1313,7 @@ void sel_antenna() {
   }
 
   if (antenna_selected != antenna_driven) {  // a repeated clear-and-shift would blink every relay off
+    if (tuning) setTuning(false);
     antenna_driven = antenna_selected;
     switch (antenna_selected) {
       case 1:
@@ -1459,11 +1344,18 @@ void sel_antenna() {
   }
 }
 
-void drawButtons_p1() {
+// ST (store antenna for the band) in manual mode, TU (start the tuner) in automatic mode
+void drawKeyB1() {
+  b1_txt = b_automatic ? "TU" : "ST";
+  uint16_t fg = (b_automatic && !digitalRead(TUNE_EXT_pin)) ? TFT_DARKGREY : TFT_WHITE;
   tft.setTextFont(4);
-  key[1].initButton(&tft, KEY_X, 75, 50, 50, TFT_WHITE, COLOR_BG, TFT_WHITE, "", 1);  // ST Button
+  key[1].initButton(&tft, KEY_X, 75, 50, 50, fg, (b_automatic && tuning) ? TFT_RED : COLOR_BG, fg, "", 1);
   key[1].setLabelDatum(0, 6, MC_DATUM);
   key[1].drawButton(false, b1_txt);
+}
+
+void drawButtons_p1() {
+  drawKeyB1();
 
   key[0].initButton(&tft, KEY_X, 140, 50, 60, TFT_WHITE, COLOR_BG, TFT_WHITE, "", 1);  // UP Button
   key[0].setLabelDatum(0, 6, MC_DATUM);

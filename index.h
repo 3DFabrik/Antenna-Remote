@@ -201,7 +201,7 @@ function render(){
   tr.onclick=()=>act('/api/tuner','v='+(s.tuneExt?0:1));
   tu.textContent=s.tuning?'TUNING ACTIVE':'TUNING INACTIVE';
   tu.classList.toggle('red',!!s.tuning);
-  tu.disabled=s.trx===0||!s.tuneExt;
+  tu.disabled=!s.tuneExt;
   tu.onclick=()=>act('/api/tune','v='+(s.tuning?0:1));
   len('cA',a.textContent);len('cT',tr.textContent);len('cU',tu.textContent);
 }
