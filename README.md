@@ -77,6 +77,7 @@ Die Release-Dateien stehen unter *Releases*:
 - `Antenna-Remote_ota.bin` ist das Programm für das **Update im Browser** (Reiter *Update*) oder per `curl`:
   `curl -H "X-AR: 1" -F "firmware=@Antenna-Remote_ota.bin" http://<IP>/update`
   Das Update läuft nur im WLAN-Modus. Vorher sollte nicht gesendet werden, denn der Umschalter startet danach neu.
+  Die Weboberfläche prüft über den Browser (höchstens einmal am Tag) auf GitHub, ob es eine neuere Version gibt, und zeigt dann oben einen Hinweis mit Link zum Reiter *Update*. Dort führt ein Link zu den Dateien des Releases.
 - `Antenna-Remote.bin` ist das Abbild für **USB**. Es wird ab Adresse 0 geschrieben:
   `esptool.py --chip esp32 write_flash 0x0 Antenna-Remote.bin`
 

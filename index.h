@@ -29,6 +29,7 @@ h1{font-size:1rem;margin:0 .6rem 0 0;white-space:nowrap}
 #sdr.on::before{background:#7dff8a;box-shadow:0 0 .35rem #2cff4f}
 #conn{font-size:.75rem;color:#9a9;white-space:nowrap}
 #conn.bad{color:#e74c3c}
+#updbar{flex:none;background:#6b8e23;color:#fff;padding:.3rem .6rem;font-size:.85rem;cursor:pointer;text-align:center}
 main{flex:1;min-height:0;min-width:0;padding:.5rem .6rem;overflow:auto}
 #main{display:flex;flex-direction:column}
 
@@ -89,6 +90,7 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 <span id="hver">FW -</span>
 <span id="conn">connecting...</span>
 </header>
+<div id="updbar" hidden onclick="tab('upd')"></div>
 
 <main id="main">
 <div class="top">
@@ -127,6 +129,9 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 <main id="upd" hidden>
 <h2 style="margin-top:0">Firmware update</h2>
 <p>Running firmware: <strong id="ver">-</strong></p>
+<p class="note" id="newfw"></p>
+<div class="btns" style="margin-top:.3rem"><button onclick="checkUpdate(true)">Check for updates</button></div>
+<p class="note"><a id="ghlink" href="https://github.com/3DFabrik/Antenna-Remote/releases/latest" target="_blank" rel="noopener" style="color:#9acd32">Download the files on GitHub</a></p>
 <p class="note">Choose the app image <strong>Antenna-Remote_ota.bin</strong>, not the merged USB image. The unit restarts when the transfer is done. The antenna relays keep their state until then, and the antenna is set again right after the restart.</p>
 <div class="row"><input type="file" id="fw" accept=".bin"></div>
 <div class="btns"><button class="go" id="bFlash" onclick="flash()">Flash</button></div>
@@ -139,7 +144,8 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 const $=i=>document.getElementById(i);
 const BANDS=[160,80,60,40,30,20,17,15,12,10,6,4];
 const TRX=[["None",0],["IC-7000",112],["IC-7300",148],["IC-7610",152]];
-let S=null,antKey='',built=false,uploading=false,toastT=0;
+let S=null,antKey='',built=false,uploading=false,toastT=0,relInfo=null,relChecked=false;
+const REL_API='https://api.github.com/repos/3DFabrik/Antenna-Remote/releases/latest';
 
 async function call(path,body){
   const o=body===undefined?{}:{method:'POST',headers:{'X-AR':'1','Content-Type':'application/x-www-form-urlencoded'},body:body};
@@ -150,7 +156,7 @@ async function call(path,body){
 
 async function poll(){
   if(!uploading){
-    try{S=await call('/api/state');render();$('conn').textContent='connected';$('conn').className='';}
+    try{S=await call('/api/state');render();$('conn').textContent='connected';$('conn').className='';if(!relChecked){relChecked=true;checkUpdate(false);}}
     catch(e){$('conn').textContent='no connection';$('conn').className='bad';}
   }
   setTimeout(poll,600);
@@ -204,6 +210,47 @@ function render(){
   tu.disabled=!s.tuneExt;
   tu.onclick=()=>act('/api/tune','v='+(s.tuning?0:1));
   len('cA',a.textContent);len('cT',tr.textContent);len('cU',tu.textContent);
+  applyRel();
+}
+
+function verNum(v){const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(v||'');return m?[+m[1],+m[2],+m[3]]:null;}
+
+function relIsNewer(){
+  const c=verNum(S&&S.ver),n=verNum(relInfo&&relInfo.tag);
+  if(!c||!n)return false;
+  for(let i=0;i<3;i++)if(c[i]!==n[i])return n[i]>c[i];
+  return false;
+}
+
+function applyRel(){
+  if(!relInfo||!S)return;
+  const n=relIsNewer(),t=$('newfw');
+  $('updbar').textContent='New firmware '+relInfo.tag+' available - click for the update page';
+  $('updbar').hidden=!n;
+  if(n){t.textContent='New firmware '+relInfo.tag+' is available.';t.dataset.n=1;}
+  else if(t.dataset.n){t.textContent='';delete t.dataset.n;}
+  if(/^https:\/\/github\.com\//.test(relInfo.url))$('ghlink').href=relInfo.url;
+}
+
+// The browser asks GitHub (at most once a day, or on demand); the unit itself needs no internet.
+async function checkUpdate(manual){
+  let rel=null;
+  try{rel=JSON.parse(localStorage.getItem('arRel'));}catch(e){}
+  if(manual||!rel||Date.now()-rel.t>864e5){
+    try{
+      const r=await fetch(REL_API);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      rel={t:Date.now(),tag:String(j.tag_name),url:String(j.html_url)};
+      try{localStorage.setItem('arRel',JSON.stringify(rel));}catch(e){}
+    }catch(e){
+      if(manual){$('newfw').textContent='GitHub is not reachable from this browser.';delete $('newfw').dataset.n;}
+      if(!rel)return;
+      if(manual)return;
+    }
+  }
+  relInfo=rel;applyRel();
+  if(manual&&!relIsNewer())$('newfw').textContent=(verNum(S&&S.ver)?'Up to date, the latest release is ':'This is a local build, the latest release is ')+rel.tag+'.';
 }
 
 function tab(t){
