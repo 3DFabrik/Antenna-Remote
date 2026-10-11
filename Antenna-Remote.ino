@@ -111,11 +111,40 @@ int kbLayout = 0;  // 0 = letters, 2 = symbols
 bool kbShift = false;
 bool kbShow = false;
 bool setupTouchWas = true;
-String p2Last[8];
+String p2Last[9];
 
 // Serial receive business
 int icom_use = 0;        // sett to 1 in case you want tp use the icom CIV function of the TRX
 byte TRX_address(0x98);  // HEX 0x70/112 = Icom IC-7000, 0x94/148 = Icom IC-7300, 0x98/152 = Icom IC-7610, store in SPIFFS as decimal value
+// Where the frequency comes from: 0 = nowhere (the serial <QRG,..> still works), 1 = Icom CI-V on Serial2, 2 = rigctld over WLAN, 3 = SDROxide over the remote protocol
+int freq_src = 1;
+bool freqSrcSet = false;
+String rig_host = "";
+int rig_port = 4532;
+WiFiClient rcClient;  // rigctld (Hamlib net rigctl) client
+String rcHost = "";
+int rcPort = 0;
+String rcLine = "";
+char rcAwait = 0;  // answer we wait for: 'f' (frequency) or 't' (PTT)
+bool rcWantT = false;
+bool rcNoPtt = false;  // the server cannot tell whether the rig transmits
+bool rcTx = false;     // the rig is transmitting
+float rcSwr = 0;       // SWR while it transmits (rigctld "l SWR")
+unsigned long rcSwrSeen = 0;
+bool rcNoSwr = false;  // the server cannot tell the SWR
+bool rcWantS = false;
+bool antPending = false;  // an antenna change waits for the end of the over
+unsigned long civLastSeen = 0;  // last answer from the Icom
+bool civTx = false;             // CI-V status: the Icom transmits
+unsigned long civTxSeen = 0;
+bool remTx = false;  // remote protocol: SDROxide says the rig transmits
+unsigned long remTxSeen = 0;
+float civSwr = 0;  // SWR from the Icom while it transmits
+unsigned long civSwrSeen = 0, civSwrPoll = 0;
+float remSwr = 0;  // SWR from SDROxide
+unsigned long remSwrSeen = 0;
+int txShown = -1;               // RX/TX mark on the display: 0 none, 1 RX, 2 TX
+unsigned long rcLastTry = 0, rcLastPoll = 0, rcSent = 0, rcLastSeen = 0;
 const byte numChars = 128;  // a WLAN password can be 63 characters
 char receivedChars[numChars];
 char tempChars[numChars];         // temporary array for use when parsing
@@ -133,31 +162,9 @@ String ANT_OLD = "";
 bool b_automatic = false;
 bool b_booting = true;
 
-//Define Bands:
-int l160 = 1810;
-int h160 = 2000;
-int l80 = 3500;
-int h80 = 3800;
-int l60 = 5250;
-int h60 = 5450;
-int l40 = 7000;
-int h40 = 7200;
-int l30 = 10100;
-int h30 = 10150;
-int l20 = 14000;
-int h20 = 14350;
-int l17 = 18068;
-int h17 = 18168;
-int l15 = 21000;
-int h15 = 21450;
-int l12 = 24890;
-int h12 = 24990;
-int l10 = 28000;
-int h10 = 29700;
-int l6 = 50000;
-int h6 = 52000;
-int l4 = 70150;
-int h4 = 70200;
+// Band limits in kHz, same order as BAND_M. Defaults are IARU region 1; 0/0 switches a band off.
+int bandLo[12] = { 1810, 3500, 5250, 7000, 10100, 14000, 18068, 21000, 24890, 28000, 50000, 70150 };
+int bandHi[12] = { 2000, 3800, 5450, 7200, 10150, 14350, 18168, 21450, 24990, 29700, 52000, 70200 };
 
 //Define Antennas
 String A1NAME = "1";  // Antenna names (Will be overwritten by what is found in SPIFFS config.txt)
@@ -319,12 +326,19 @@ void loop(void) {
   if ((WiFi.status() == WL_CONNECTED) && (b_wifi_on)) {  // Only serve in case we are connected to the network
     server.handleClient();
     rigPoll();
+    rcPoll();
   }
   wifiTick();
 
   if (tuning && millis() - tuneStart >= TUNE_MS) setTuning(false);
+  if (antPending && !rigTransmits()) sel_antenna();
+  drawTxState(false);
 
-  if (TRX_address >= 1) geticomdata();
+  if (freq_src == 1 && TRX_address >= 1) geticomdata();
+  if (freq_src == 1 && TRX_address >= 1 && rigTransmits() && millis() - civSwrPoll >= 400) {
+    civSwrPoll = millis();
+    getswr();
+  }
   if (newData2) {
     // Neue Daten verarbeiten oder anzeigen
     float QRGreaded = processReceivedData();
@@ -454,7 +468,10 @@ void loop(void) {
 
   if (millis() - aliveMillis >= aliveintervall) {  // here an alive message will be triggered every 1000ms
     aliveMillis = millis();
-    getqrg();  //Request QRG from the TRX
+    if (freq_src == 1 && TRX_address >= 1) {
+      getqrg();  //Request QRG from the TRX
+      getptt();
+    }
     sendalivemessage();
     if (n_disp_page == 2) { tft_update(); }  // keeps the connection state current
     if (n_disp_page == 1) { drawLinkStatus(false); }
@@ -610,6 +627,8 @@ void createDefaultConfig() {
   file.println("n_ant_max=8");
   file.println("icom_use=0");
   file.println("TRX_address=152");
+  file.println("freq_src=1");
+  file.println("rig_port=4532");
   file.close();
 }
 
@@ -630,11 +649,21 @@ void geticomdata() {
   }
 }
 
+float civSwrFromRaw(int r) {  // Icom scale: 0 = 1.0, 48 = 1.5, 80 = 2.0, 120 = 3.0; above that only a rough guess up to 6
+  static const int rawPts[] = { 0, 48, 80, 120, 255 };
+  static const float swrPts[] = { 1.0f, 1.5f, 2.0f, 3.0f, 6.0f };
+  for (int i = 1; i < 5; i++)
+    if (r <= rawPts[i]) return swrPts[i - 1] + (swrPts[i] - swrPts[i - 1]) * (r - rawPts[i - 1]) / (rawPts[i] - rawPts[i - 1]);
+  return 6.0f;
+}
+
 unsigned long processReceivedData(void) {
 
   uint32_t t_QRG = 0;
   uint8_t GHZ = 0, MHZ = 0, KHZ = 0, HZ = 0, mHZ = 0;
   static unsigned long lastfreq = 0;
+
+  if (receivedData[0] == 0xE0 && receivedData[1] == TRX_address) civLastSeen = millis();
 
   if (receivedData[0] == 0xE0 && receivedData[1] == TRX_address && receivedData[2] == 0x3) {
     GHZ = receivedData[7];           // 1GHz & 100Mhz
@@ -670,6 +699,17 @@ unsigned long processReceivedData(void) {
     HZ = receivedData[5];         // 1Khz & 100Hz
     HZ = HZ - (((HZ / 16) * 6));  // Transform bytes ICOM CAT
     if (HZ >= 100) return (0);
+
+  } else if (receivedData[0] == 0xE0 && receivedData[1] == TRX_address && receivedData[2] == 0x1C && receivedData[3] == 0x00) {
+    civTx = receivedData[4] != 0;
+    civTxSeen = millis();
+    return (0);
+
+  } else if (receivedData[0] == 0xE0 && receivedData[1] == TRX_address && receivedData[2] == 0x15 && receivedData[3] == 0x12) {
+    int raw = ((receivedData[4] >> 4) * 10 + (receivedData[4] & 0x0F)) * 100 + (receivedData[5] >> 4) * 10 + (receivedData[5] & 0x0F);  // two BCD bytes, 0000 to 0255
+    civSwr = civSwrFromRaw(raw);
+    civSwrSeen = millis();
+    return (0);
 
   } else if (receivedData[0] == TRX_address && receivedData[1] == 0xE0 && receivedData[2] == 0x15 && receivedData[3] == 0x2) {
     SValue_raw = (receivedData[4] * 100 + receivedData[5]);  // S-meter level *(0000=S0, 0120=S9, 0241=S9+60dB)
@@ -709,12 +749,23 @@ void sendConfig() {
 }
 
 bool isStoredKey(const String& key) {
-  if (key == "n_ant_max" || key == "TRX_address" || key == "TUNEROFF") return true;
+  if (key == "n_ant_max" || key == "TRX_address" || key == "TUNEROFF" || key == "freq_src" || key == "rig_host" || key == "rig_port") return true;
   for (int i = 0; i < 8; i++)
     if (key == "A" + String(i + 1) + "NAME") return true;
   for (int i = 0; i < 12; i++)
     if (key == BAND_KEY[i]) return true;
+  for (int i = 0; i < 12; i++)
+    if (key == "lo" + String(BAND_M[i]) || key == "hi" + String(BAND_M[i])) return true;
   return false;
+}
+
+String cleanHost(const String& s) {  // host name or IP address, nothing that could break the config file
+  String o = "";
+  for (unsigned int i = 0; i < s.length() && o.length() < 40; i++) {
+    char c = s[i];
+    if (isalnum((unsigned char)c) || c == '.' || c == '-' || c == '_' || c == ':') o += c;
+  }
+  return o;
 }
 
 void applyConfigKey(const String& key, const String& value) {
@@ -723,10 +774,23 @@ void applyConfigKey(const String& key, const String& value) {
   if (key == "TUNEROFF") TUNEROFF = value;
   if (key == "n_ant_max") n_ant_max = value.toInt();
   if (key == "TRX_address") TRX_address = byte(value.toInt());
+  if (key == "freq_src") {
+    freq_src = constrain((int)value.toInt(), 0, 3);
+    freqSrcSet = true;
+  }
+  if (key == "rig_host") rig_host = cleanHost(value);
+  if (key == "rig_port") {
+    int p = value.toInt();
+    if (p >= 1 && p <= 65535) rig_port = p;
+  }
   for (int i = 0; i < 8; i++)
     if (key == "A" + String(i + 1) + "NAME") *antNames[i] = value;
   for (int i = 0; i < 12; i++)
     if (key == BAND_KEY[i]) *bandAnt[i] = value.toInt();
+  for (int i = 0; i < 12; i++) {
+    if (key == "lo" + String(BAND_M[i])) bandLo[i] = value.toInt();
+    if (key == "hi" + String(BAND_M[i])) bandHi[i] = value.toInt();
+  }
 }
 
 void readConfig() {
@@ -752,6 +816,7 @@ void readConfig() {
     }
   }
   file.close();
+  if (!freqSrcSet) freq_src = TRX_address ? 1 : 0;  // a config from before the source setting
 }
 
 // Position of the line "key=..." in text (lines end in \n), or -1.
@@ -890,7 +955,8 @@ String stateJson() {
   o += ",\"trx\":" + String(TRX_address) + ",\"qrg\":" + String(hz) + ",\"band\":" + String(BAND) + ",\"ver\":" + jsonStr(fwVersion);
   o += ",\"name\":" + jsonStr(ANT) + ",\"names\":" + namesJson();
   o += ",\"tuneExt\":" + String(digitalRead(TUNE_EXT_pin)) + ",\"tuning\":" + String(digitalRead(TUNE_REQ_pin));
-  o += ",\"rssi\":" + String(WiFi.RSSI()) + ",\"bars\":" + String(wifiRssiBars()) + ",\"sdr\":" + String((rigClient && rigClient.connected()) ? 1 : 0) + "}";
+  o += ",\"rssi\":" + String(WiFi.RSSI()) + ",\"bars\":" + String(wifiRssiBars()) + ",\"sdr\":" + String((rigClient && rigClient.connected()) ? 1 : 0);
+  o += ",\"src\":" + String(freq_src) + ",\"link\":" + String(srcLink() ? 1 : 0) + ",\"tx\":" + String(txState() == 2 ? 1 : 0) + ",\"ptt\":" + String(txState() ? 1 : 0) + ",\"swr\":" + String(swrValue(), 1) + ",\"swrna\":" + String(rcNoSwr ? 1 : 0) + ",\"pend\":" + String(antPending ? 1 : 0) + "}";
   return o;
 }
 
@@ -901,7 +967,12 @@ String configJson() {
     if (i) o += ",";
     o += String(*bandAnt[i]);
   }
-  return o + "]}";
+  o += "],\"lo\":[";
+  for (int i = 0; i < 12; i++) o += String(i ? "," : "") + String(bandLo[i]);
+  o += "],\"hi\":[";
+  for (int i = 0; i < 12; i++) o += String(i ? "," : "") + String(bandHi[i]);
+  o += "],\"src\":" + String(freq_src) + ",\"rhost\":" + jsonStr(rig_host) + ",\"rport\":" + String(rig_port);
+  return o + "}";
 }
 
 void sendJson(const String& body) {
@@ -994,6 +1065,7 @@ void handleUpdateUpload() {
     tuning = false;  // a tune request must not hang on while the loop is stopped
     digitalWrite(TUNE_REQ_pin, LOW);
     rigClient.stop();
+    rcClient.stop();
     rigServer.stop();
     servers_started = false;
     img.deleteSprite();  // the antenna list sprite is the biggest block of RAM the update could use
@@ -1060,7 +1132,7 @@ void handleAuto() {
 
 void handleTuner() {
   if (!webGuard()) return;
-  if (!b_automatic && TRX_address != 0) setTuner(server.arg("v") == "1");
+  if (!b_automatic) setTuner(server.arg("v") == "1");
   sendJson(stateJson());
 }
 
@@ -1090,6 +1162,20 @@ void handleConfigPost() {
   for (int i = 0; i < 12; i++) {
     int v = server.arg("b" + String(i)).toInt();
     if (v >= 1 && v <= 8) batch += String(BAND_KEY[i]) + "=" + String(v) + "\n";
+  }
+  for (int i = 0; i < 12; i++) {
+    if (!server.hasArg("lo" + String(i)) || !server.hasArg("hi" + String(i))) continue;
+    int lo = server.arg("lo" + String(i)).toInt(), hi = server.arg("hi" + String(i)).toInt();
+    if (lo >= 0 && hi >= lo && hi <= 999999) batch += "lo" + String(BAND_M[i]) + "=" + String(lo) + "\nhi" + String(BAND_M[i]) + "=" + String(hi) + "\n";
+  }
+  if (server.hasArg("src")) {
+    int s = server.arg("src").toInt();
+    if (s >= 0 && s <= 3) batch += "freq_src=" + String(s) + "\n";
+  }
+  if (server.hasArg("rhost")) batch += "rig_host=" + cleanHost(server.arg("rhost")) + "\n";
+  if (server.hasArg("rport")) {
+    int p = server.arg("rport").toInt();
+    if (p >= 1 && p <= 65535) batch += "rig_port=" + String(p) + "\n";
   }
   writeConfigBatch(batch);
   if (antenna_selected > n_ant_max) antenna_selected = 1;  // fewer antennas than before
@@ -1166,13 +1252,14 @@ void tft_update() {
     } else {
       tft.drawString(BAND_txt, 90, 78, 4);
     }
+    drawTxState(true);
   }
 
   if (n_disp_page == 2) {  // This is display page 2: the connection
     if (b_page_changed == true) {
       b_page_changed = false;
-      const char* labels[] = { "MODE:", "SSID:", "STATE:", "IP:", "RSSI:", "REMOTE:", "ANTENNA #:", "AUTOMODE:" };
-      for (int i = 0; i < 8; i++) {
+      const char* labels[] = { "MODE:", "SSID:", "STATE:", "IP:", "RSSI:", "REMOTE:", "ANTENNA #:", "AUTOMODE:", "SOURCE:" };
+      for (int i = 0; i < 9; i++) {
         tft.drawString(labels[i], 0, i * 20, 2);
         p2Last[i] = "\x01";  // forces the value to be drawn
       }
@@ -1187,6 +1274,7 @@ void tft_update() {
     p2Field(5, !up ? String("-") : (rigClient && rigClient.connected()) ? String("SDROxide connected") : "waiting, port " + String(RIG_PORT));
     p2Field(6, String(antenna_selected) + " " + ANT);
     p2Field(7, b_automatic ? "on" : "off");
+    p2Field(8, srcText());
     if (hintUntil != 0 && millis() > hintUntil) { hintUntil = 0; }
     tft.setTextColor(TFT_YELLOW, COLOR_BG);
     tft.setTextPadding(240);
@@ -1249,7 +1337,6 @@ void getswr() {         // Read SWR meter level*( 0000=SWR1.0, 0048=SWR1.5,0080=
   Serial2.write(0x15);  // command 15
   Serial2.write(0x12);  // sub command Read swr (12), command 15 02
   Serial2.write(0xFD);  // end sequence always 0xFD
-  delay(20);
 }
 
 void getqrg() {         // Read operating frequency
@@ -1261,40 +1348,35 @@ void getqrg() {         // Read operating frequency
   Serial2.write(0xFD);  // end sequence always 0xFD
 }
 
+void getptt() {         // Read the transmit status (CI-V 1C 00: 00 = receiving, 01 = transmitting)
+  Serial2.write(0xFE);
+  Serial2.write(0xFE);
+  Serial2.write(TRX_address);
+  Serial2.write(0xE0);
+  Serial2.write(0x1C);
+  Serial2.write(0x00);
+  Serial2.write(0xFD);
+}
+
 void sel_band(float t_QRG) {
   float b_QRG = t_QRG / 10;
   BAND = 0;
-  if (b_QRG >= l160 && b_QRG <= h160) BAND = 160;
-  if (b_QRG >= l80 && b_QRG <= h80) BAND = 80;
-  if (b_QRG >= l60 && b_QRG <= h60) BAND = 60;
-  if (b_QRG >= l40 && b_QRG <= h40) BAND = 40;
-  if (b_QRG >= l30 && b_QRG <= h30) BAND = 30;
-  if (b_QRG >= l20 && b_QRG <= h20) BAND = 20;
-  if (b_QRG >= l17 && b_QRG <= h17) BAND = 17;
-  if (b_QRG >= l15 && b_QRG <= h15) BAND = 15;
-  if (b_QRG >= l12 && b_QRG <= h12) BAND = 12;
-  if (b_QRG >= l10 && b_QRG <= h10) BAND = 10;
-  if (b_QRG >= l6 && b_QRG <= h6) BAND = 6;
-  if (b_QRG >= l4 && b_QRG <= h4) BAND = 4;
+  for (int i = 0; i < 12; i++)
+    if (b_QRG >= bandLo[i] && b_QRG <= bandHi[i]) BAND = BAND_M[i];
   sel_antenna();
 }
 
 void sel_antenna() {
   if (b_automatic == true) {
-    if (BAND == 160) antenna_selected = a160m;
-    if (BAND == 80) antenna_selected = a80m;
-    if (BAND == 60) antenna_selected = a60m;
-    if (BAND == 40) antenna_selected = a40m;
-    if (BAND == 30) antenna_selected = a30m;
-    if (BAND == 20) antenna_selected = a20m;
-    if (BAND == 17) antenna_selected = a17m;
-    if (BAND == 15) antenna_selected = a15m;
-    if (BAND == 12) antenna_selected = a12m;
-    if (BAND == 10) antenna_selected = a10m;
-    if (BAND == 6) antenna_selected = a6m;
-    if (BAND == 4) antenna_selected = a4m;
-    // if (BAND == 0) antenna_selected = 0;
+    for (int i = 0; i < 12; i++)
+      if (BAND == BAND_M[i]) antenna_selected = *bandAnt[i];
   }
+
+  if (rigTransmits() && antenna_driven != 0 && antenna_selected != antenna_driven) {  // never switch under power; the loop comes back at the end of the over
+    antPending = true;
+    return;
+  }
+  antPending = false;
 
   // Here we switch on/off the internal tuner of the icom TRX depending on the setting in the "Tuneroff" value
   int intValue = TUNEROFF.toInt();
@@ -1713,7 +1795,7 @@ void rigHandle(String line) {
     if (hz == 0) {
       out = "RPRT -1\n";
     } else {
-      rigSetFreq(hz);
+      if (freq_src == 3) rigSetFreq(hz);  // another source is chosen: SDROxide may still look at the antenna, but does not set the frequency
       out = "RPRT 0\n";
     }
   } else if (line.startsWith("A ")) {  // choose an antenna by hand: manual mode with it
@@ -1735,6 +1817,25 @@ void rigHandle(String line) {
     } else {
       out = "RPRT -1\n";
     }
+  } else if (line.startsWith("P ")) {  // the rig transmits (1) or receives (0); SDROxide sends it on every change and now and then
+    String v = line.substring(2);
+    v.trim();
+    if (v == "0" || v == "1") {
+      remTx = (v == "1");
+      remTxSeen = millis();
+      out = "RPRT 0\n";
+    } else {
+      out = "RPRT -1\n";
+    }
+  } else if (line.startsWith("W ")) {  // the SWR while the rig transmits, e.g. "W 1.5"
+    float v = line.substring(2).toFloat();
+    if (v >= 1.0f && v < 100.0f) {
+      remSwr = v;
+      remSwrSeen = millis();
+      out = "RPRT 0\n";
+    } else {
+      out = "RPRT -1\n";
+    }
   } else {
     out = "RPRT -1\n";
   }
@@ -1747,6 +1848,152 @@ void rigSetFreq(unsigned long hz) {
   QRG = q;
   sel_band(q);
   tft_update();
+}
+
+// ******************************************** rigctld client (Hamlib net rigctl) ********************************************************
+// Asks "f" (frequency) and "t" (PTT) twice a second; the server may be rigctld, flrig or SDROxide. Only read commands are sent.
+bool rcLive() {
+  return freq_src == 2 && rcClient.connected() && millis() - rcLastSeen < 3000;
+}
+
+bool srcLink() {  // is there a link to the chosen source
+  if (freq_src == 1) return TRX_address && civLastSeen && millis() - civLastSeen < 3000;
+  if (freq_src == 2) return rcLive();
+  if (freq_src == 3) return servers_started && rigClient && rigClient.connected();
+  return false;
+}
+
+String srcText() {
+  if (freq_src == 1) return TRX_address ? String("CI-V") + (srcLink() ? " ok" : " ...") : String("CI-V, no TRX type");
+  if (freq_src == 2) return rig_host.length() ? rig_host + (rcLive() ? (rcTx ? " TX" : " ok") : " ...") : String("rigctld, no host");
+  if (freq_src == 3) return String("SDROxide") + (srcLink() ? " ok" : " ...");
+  return "none";
+}
+
+int txState() {  // 0 = the source does not say, 1 = receiving, 2 = transmitting
+  if (freq_src == 1) {
+    if (TRX_address && civTxSeen && millis() - civTxSeen < 3000) return civTx ? 2 : 1;
+  } else if (freq_src == 2) {
+    if (rcLive() && !rcNoPtt) return rcTx ? 2 : 1;
+  } else if (freq_src == 3) {
+    if (remTxSeen && millis() - remTxSeen < 5000) return remTx ? 2 : 1;
+  }
+  return 0;
+}
+
+bool rigTransmits() {
+  return txState() == 2;
+}
+
+float swrValue() {  // only while the rig transmits
+  if (txState() != 2) return 0;
+  if (freq_src == 1 && civSwrSeen && millis() - civSwrSeen < 2000) return civSwr;
+  if (freq_src == 2 && rcSwrSeen && millis() - rcSwrSeen < 2000) return rcSwr;
+  if (freq_src == 3 && remSwrSeen && millis() - remSwrSeen < 3000) return remSwr;
+  return 0;
+}
+
+void drawTxState(bool force) {
+  int v = txState();
+  if (!force && v == txShown) return;
+  txShown = v;
+  if (n_disp_page != 1) return;
+  tft.fillRect(225, 78, 45, 26, COLOR_BG);
+  if (v) {
+    tft.setTextColor(v == 2 ? TFT_RED : TFT_GREEN, COLOR_BG);
+    tft.drawString(v == 2 ? "TX" : "RX", 228, 78, 4);
+    tft.setTextColor(TFT_WHITE, COLOR_BG);
+  }
+}
+
+void rcStop() {
+  rcClient.stop();
+  rcAwait = 0;
+  rcTx = false;
+  rcSwr = 0;
+  rcSwrSeen = 0;
+  rcWantS = false;
+  rcLine = "";
+}
+
+void rcPoll() {
+  if (freq_src != 2 || rig_host.length() == 0) {
+    if (rcClient.connected()) rcStop();
+    return;
+  }
+  if (rcClient.connected() && (rcHost != rig_host || rcPort != rig_port)) rcStop();
+  if (!rcClient.connected()) {
+    rcStop();
+    if (rcLastTry && millis() - rcLastTry < 10000) return;
+    rcLastTry = millis();
+    if (!rcClient.connect(rig_host.c_str(), rig_port, 800)) return;  // blocks for 800 ms at most, and only every 10 s
+    rcClient.setNoDelay(true);
+    rcHost = rig_host;
+    rcPort = rig_port;
+    rcLastSeen = millis();
+    rcLastPoll = 0;
+    rcWantT = false;
+    rcNoPtt = false;
+    rcNoSwr = false;
+    Serial.println("rigctld: connected to " + rcHost + ":" + String(rcPort));
+    if (n_disp_page == 2) tft_update();
+  }
+
+  while (rcClient.available()) {
+    char ch = rcClient.read();
+    if (ch != '\n') {
+      if (ch != '\r' && rcLine.length() < 40) rcLine += ch;
+      continue;
+    }
+    String l = rcLine;
+    rcLine = "";
+    rcLastSeen = millis();
+    if (rcAwait == 'f') {
+      unsigned long hz = strtoul(l.c_str(), NULL, 10);
+      if (!l.startsWith("RPRT") && hz > 0) rigSetFreq(hz);
+      rcWantT = true;
+    } else if (rcAwait == 't') {
+      if (l.startsWith("RPRT")) {
+        rcNoPtt = true;
+        rcTx = false;
+      } else {
+        rcTx = (l.toInt() != 0);
+        rcWantS = rcTx && !rcNoSwr;
+      }
+    } else if (rcAwait == 's') {
+      float v = l.toFloat();
+      if (l.startsWith("RPRT")) {
+        rcNoSwr = true;
+      } else if (v >= 1.0f) {
+        rcSwr = v;
+        rcSwrSeen = millis();
+      }
+    }
+    rcAwait = 0;
+  }
+
+  if (rcAwait && millis() - rcSent > 2000) {
+    Serial.println("rigctld: no answer, reconnecting");
+    rcStop();
+    return;
+  }
+  if (!rcAwait) {
+    if (rcWantT && !rcNoPtt) {
+      rcClient.print("t\n");
+      rcAwait = 't';
+      rcSent = millis();
+      rcWantT = false;
+    } else if (rcWantS && !rcNoSwr) {
+      rcClient.print("l SWR\n");
+      rcAwait = 's';
+      rcSent = millis();
+      rcWantS = false;
+    } else if (millis() - rcLastPoll >= 500) {
+      rcClient.print("f\n");
+      rcAwait = 'f';
+      rcSent = rcLastPoll = millis();
+    }
+  }
 }
 
 // ************************************************ WLAN setup pages ***********************************************************************

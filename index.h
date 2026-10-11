@@ -11,35 +11,41 @@ html{font-size:clamp(9px,.9vw + .9vh,34px)}
 html,body{height:100%}
 body{margin:0;background:#1c1c1c;color:#eee;font-family:system-ui,"Segoe UI",Arial,sans-serif;display:flex;flex-direction:column;min-width:0}
 header{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem .3rem;padding:.35rem .6rem;background:#333;flex:none}
-h1{font-size:1rem;margin:0 .6rem 0 0;white-space:nowrap}
+h1{font-size:max(14px,1rem);margin:0 .6rem 0 0;white-space:nowrap}
 .sp{flex:1}
-.tab{background:#444;color:#eee;border:0;padding:.25rem .6rem;border-radius:.3rem;cursor:pointer;font-size:.85rem}
+.tab{background:#444;color:#eee;border:0;padding:max(4px,.25rem) max(9px,.6rem);border-radius:.3rem;cursor:pointer;font-size:max(13px,.85rem)}
 .tab.on{background:#6b8e23}
-#hver{font-size:.75rem;color:#aaa;white-space:nowrap;margin-left:.4rem}
-#link{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#aaa;white-space:nowrap}
-.bars{display:inline-flex;align-items:flex-end;gap:2px;height:.9rem}
-.bars i{display:block;width:.28rem;background:#444;border-radius:1px}
+#hver{font-size:max(11px,.75rem);color:#aaa;white-space:nowrap;margin-left:.4rem}
+#link{display:flex;align-items:center;gap:.35rem;font-size:max(11px,.75rem);color:#aaa;white-space:nowrap}
+.bars{display:inline-flex;align-items:flex-end;gap:2px;height:max(11px,.9rem)}
+.bars i{display:block;width:max(3px,.28rem);background:#444;border-radius:1px}
 .bars i:nth-child(1){height:35%}
 .bars i:nth-child(2){height:65%}
 .bars i:nth-child(3){height:100%}
 .bars i.on{background:#00e5ff}
-#sdr{display:inline-flex;align-items:center;gap:.25rem;color:#666}
-#sdr::before{content:"";width:.55rem;height:.55rem;border-radius:50%;background:#444}
-#sdr.on{color:#7dff8a}
-#sdr.on::before{background:#7dff8a;box-shadow:0 0 .35rem #2cff4f}
-#conn{font-size:.75rem;color:#9a9;white-space:nowrap}
+#srcLink{display:inline-flex;align-items:center;gap:.25rem;color:#666}
+#srcLink::before{content:"";width:max(7px,.55rem);height:max(7px,.55rem);border-radius:50%;background:#444}
+#srcLink.on{color:#7dff8a}
+#srcLink.on::before{background:#7dff8a;box-shadow:0 0 .35rem #2cff4f}
+#conn{font-size:max(11px,.75rem);color:#9a9;white-space:nowrap}
 #conn.bad{color:#e74c3c}
-#updbar{flex:none;background:#6b8e23;color:#fff;padding:.3rem .6rem;font-size:.85rem;cursor:pointer;text-align:center}
+#updbar{flex:none;background:#6b8e23;color:#fff;padding:.3rem .6rem;font-size:max(12px,.85rem);cursor:pointer;text-align:center}
 main{flex:1;min-height:0;min-width:0;padding:.5rem .6rem;overflow:auto}
 #main{display:flex;flex-direction:column}
 
 /* Everything on the main page takes its text size from the box it sits in (container query units). */
 .top{display:flex;gap:.5rem;align-items:stretch;flex:none}
-.lcd{flex:1;min-width:0;container-type:size;aspect-ratio:3/1;background:#0b1a0e;border:2px solid #333;border-radius:.4rem;box-shadow:inset 0 0 1.2rem #000;overflow:hidden}
+.lcd{position:relative;flex:1;min-width:0;container-type:size;aspect-ratio:3/1;background:#0b1a0e;border:2px solid #333;border-radius:.4rem;box-shadow:inset 0 0 1.2rem #000;overflow:hidden}
 .lcdin{display:grid;grid-template-columns:1fr auto;grid-template-rows:1fr auto;height:100%;padding:4cqh 4cqw;column-gap:2cqw}
 .digits{position:relative;align-self:center;justify-self:end;font-family:"Courier New",Consolas,ui-monospace,monospace;font-weight:700;font-size:min(50cqh,16cqw);line-height:1;white-space:nowrap}
 .digits .ghost{display:block;color:#143019;text-align:right}
 #qrg{position:absolute;right:0;top:0;color:#7dff8a;text-shadow:0 0 .3em #2cff4f99;white-space:nowrap}
+#txm{position:absolute;left:4cqw;top:6cqh;font-family:"Courier New",Consolas,ui-monospace,monospace;font-weight:700;font-size:min(16cqh,5cqw);color:#4fbf5d}
+#txm.tx{color:#ff4d4d;text-shadow:0 0 .4em #f00a}
+#swr{font-size:.6em;margin-left:.7em}
+#swr.ok{color:#7dff8a}
+#swr.mid{color:#ffd24d}
+#swr.hi{color:#ff4d4d}
 .unit{align-self:center;font-family:"Courier New",Consolas,ui-monospace,monospace;font-weight:700;font-size:min(16cqh,5cqw);color:#4fbf5d}
 #sub{grid-column:1/3;font-family:"Courier New",Consolas,ui-monospace,monospace;font-size:max(9px,min(11cqh,3.6cqw));color:#4fbf5d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ctl{display:flex;flex-direction:column;gap:.3rem;width:clamp(6.5rem,30vw,24rem);flex:none}
@@ -51,7 +57,7 @@ main{flex:1;min-height:0;min-width:0;padding:.5rem .6rem;overflow:auto}
 .cb.on{background:#2e8b57}
 .cb.red{background:#c0392b}
 .cb:disabled{opacity:.4;cursor:default}
-.ants{flex:1;min-height:0;display:flex;flex-direction:column;gap:.3rem;margin-top:.5rem}
+.ants{flex:1;min-height:0;display:grid;grid-auto-flow:column;grid-template-rows:repeat(var(--rows,4),minmax(0,1fr));grid-auto-columns:minmax(0,1fr);gap:.3rem;margin-top:.5rem}
 .ants .cell{min-height:2.2rem;max-height:14rem}
 .ant{background:#000;color:#888;border:2px solid #444;border-radius:.4rem;font-size:min(46cqh,calc(92cqw/(var(--len,8)*.62)))}
 .ant.sel{background:#6b8e23;color:#fff;border-color:#9acd32}
@@ -76,7 +82,7 @@ select{flex:1;min-width:0}
 input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 #toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:#2e8b57;color:#fff;padding:.5rem 1rem;border-radius:.4rem;font-size:.9rem;box-shadow:0 2px 10px #000}
 @media(max-width:520px){h1{display:none}.grid2{grid-template-columns:1fr}}
-@media(max-width:420px){.lcd{aspect-ratio:2.2/1}.tab{padding:.2rem .4rem}#hver,#conn{font-size:.65rem}#rssi{display:none}}
+@media(max-width:420px){.lcd{aspect-ratio:2.2/1}.tab{padding:max(3px,.2rem) max(6px,.4rem)}#hver,#conn{font-size:max(10px,.65rem)}#rssi{display:none}}
 </style>
 </head>
 <body>
@@ -86,7 +92,7 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 <button class="tab" id="tabSet" onclick="tab('set')">Settings</button>
 <button class="tab" id="tabUpd" onclick="tab('upd')">Update</button>
 <span class="sp"></span>
-<span id="link" title="WLAN signal and SDROxide connection"><span class="bars"><i></i><i></i><i></i></span><span id="rssi"></span><span id="sdr">SDROxide</span></span>
+<span id="link" title="WLAN signal and frequency source"><span class="bars"><i></i><i></i><i></i></span><span id="rssi"></span><span id="srcLink" hidden></span></span>
 <span id="hver">FW -</span>
 <span id="conn">connecting...</span>
 </header>
@@ -94,7 +100,7 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 
 <main id="main">
 <div class="top">
-<div class="lcd"><div class="lcdin">
+<div class="lcd"><div id="txm" hidden><span id="txt"></span><span id="swr" hidden></span></div><div class="lcdin">
 <div class="digits"><span class="ghost">88.8888</span><span id="qrg">-.----</span></div>
 <div class="unit">MHz</div>
 <div id="sub"></div>
@@ -115,8 +121,15 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 <div id="antRows"></div>
 <h2>Band to antenna assignment</h2>
 <div class="grid2" id="bandRows"></div>
-<h2>ICOM only</h2>
-<div class="row"><label class="l">TRX type</label><select id="trx" style="max-width:14rem"></select></div>
+<h2>Band limits (kHz)</h2>
+<div class="row"><label class="l">Preset</label><select id="region" style="max-width:16rem"><option value="1">Region 1 (Europe, Africa)</option><option value="2">Region 2 (Americas)</option><option value="3">Region 3 (Asia, Pacific)</option><option value="c">Custom</option></select></div>
+<div class="grid2" id="limRows"></div>
+<h2>Frequency source</h2>
+<div class="row"><label class="l">Source</label><select id="src" style="max-width:20rem"><option value="0">None (serial or Windows program only)</option><option value="1">Icom CI-V (cable)</option><option value="2">Hamlib rigctld (WLAN)</option><option value="3">SDROxide (remote protocol)</option></select></div>
+<div class="row" id="rowTrx"><label class="l">TRX type</label><select id="trx" style="max-width:14rem"></select></div>
+<div class="row" id="rowRig"><label class="l">Host</label><input type="text" id="rhost" maxlength="40" placeholder="IP address of the PC"><input type="number" id="rport" min="1" max="65535" value="4532" style="width:5rem;flex:none"></div>
+<p class="note" id="srcHelp"></p>
+<p class="note" id="srcState"></p>
 <div class="btns">
 <button onclick="loadCfg(true)">Get Config</button>
 <button class="go" onclick="save()">Send Config</button>
@@ -144,6 +157,11 @@ input[type=file]{color:#ddd;max-width:100%;font-size:.85rem}
 const $=i=>document.getElementById(i);
 const BANDS=[160,80,60,40,30,20,17,15,12,10,6,4];
 const TRX=[["None",0],["IC-7000",112],["IC-7300",148],["IC-7610",152]];
+const REGIONS={
+  '1':{lo:[1810,3500,5250,7000,10100,14000,18068,21000,24890,28000,50000,70150],hi:[2000,3800,5450,7200,10150,14350,18168,21450,24990,29700,52000,70200]},
+  '2':{lo:[1800,3500,5330,7000,10100,14000,18068,21000,24890,28000,50000,0],hi:[2000,4000,5410,7300,10150,14350,18168,21450,24990,29700,54000,0]},
+  '3':{lo:[1800,3500,5330,7000,10100,14000,18068,21000,24890,28000,50000,0],hi:[2000,3900,5410,7300,10150,14350,18168,21450,24990,29700,54000,0]}
+};
 let S=null,antKey='',built=false,uploading=false,toastT=0,relInfo=null,relChecked=false;
 const REL_API='https://api.github.com/repos/3DFabrik/Antenna-Remote/releases/latest';
 
@@ -179,14 +197,22 @@ function render(){
   $('hver').textContent='FW '+s.ver;
   document.querySelectorAll('#link .bars i').forEach((e,k)=>e.classList.toggle('on',k<s.bars));
   $('rssi').textContent=s.rssi+' dBm';
-  $('sdr').classList.toggle('on',!!s.sdr);
-  $('sdr').title=s.sdr?'SDROxide is connected':'SDROxide is not connected';
+  const SRC=['','CI-V','Hamlib','SDROxide'];
+  const sl=$('srcLink');
+  sl.hidden=!s.src;
+  sl.textContent=SRC[s.src]||'';
+  sl.classList.toggle('on',!!s.link);
+  sl.title=(SRC[s.src]||'')+(s.link?' is connected':' is not connected');
+  const m=$('txm');
+  m.hidden=!s.ptt;$('txt').textContent=s.tx?'TX':'RX';m.classList.toggle('tx',!!s.tx);
+  const w=$('swr');w.hidden=!(s.tx&&s.swr>0);
+  if(!w.hidden){w.textContent='SWR '+s.swr.toFixed(1);w.className=s.swr<1.5?'ok':s.swr<2.5?'mid':'hi';}
   $('qrg').textContent=s.qrg>0?(s.qrg/1e6).toFixed(4):'-.----';
-  $('sub').textContent='BAND '+(s.band?s.band+' m':'--')+(s.name?'  |  '+s.name:'');
+  $('sub').textContent='BAND '+(s.band?s.band+' m':'--')+(s.name?'  |  '+s.name:'')+(s.pend?'  |  waiting for RX':'');
   const key=s.n+'|'+s.names.slice(0,s.n).join('\u0001');
   if(key!==antKey){
     antKey=key;
-    const box=$('ants');box.textContent='';
+    const box=$('ants');box.textContent='';box.style.setProperty('--rows',Math.ceil(s.n/2));
     for(let i=1;i<=s.n;i++){
       const c=document.createElement('div');c.className='cell';c.id='cell'+i;
       c.style.setProperty('--len',Math.max(3,s.names[i-1].length));
@@ -203,7 +229,7 @@ function render(){
   a.onclick=()=>act('/api/auto','v='+(s.auto?0:1));
   const tr=$('bTuner'),tu=$('bTune');
   tr.textContent=s.tuneExt?'INT TUNER OFF':'INT TUNER ON';
-  tr.disabled=!!s.auto||s.trx===0;
+  tr.disabled=!!s.auto;
   tr.onclick=()=>act('/api/tuner','v='+(s.tuneExt?0:1));
   tu.textContent=s.tuning?'TUNING ACTIVE':'TUNING INACTIVE';
   tu.classList.toggle('red',!!s.tuning);
@@ -211,6 +237,28 @@ function render(){
   tu.onclick=()=>act('/api/tune','v='+(s.tuning?0:1));
   len('cA',a.textContent);len('cT',tr.textContent);len('cU',tu.textContent);
   applyRel();
+  srcView();
+}
+
+function srcView(){
+  const k=$('src').value;
+  $('rowTrx').hidden=k!=='1';$('rowRig').hidden=k!=='2';
+  $('srcHelp').textContent={
+    '0':'The frequency is not read. It can still come from the Windows program over USB or Bluetooth.',
+    '1':'Reads the frequency from an Icom over the CI-V cable.',
+    '2':'Asks a rigctld (Hamlib, flrig, or the Hamlib server of SDROxide) for the frequency and whether the rig transmits.',
+    '3':'SDROxide connects to this unit and sends the frequency. In SDROxide: Settings, Radio, Use Antenna Remote, and under Servers the address of this unit.'
+  }[k]||'';
+  if(!S)return;
+  let t='';
+  if(S.src===1)t=S.link?'CI-V: the TRX answers':'CI-V: no answer from the TRX';
+  else if(S.src===2)t=S.link?'Hamlib: connected':'Hamlib: not connected';
+  else if(S.src===3)t=S.link?'SDROxide: connected':'SDROxide: not connected';
+  if(S.sdr&&S.src!==3)t+=(t?'. ':'')+'SDROxide is connected, but its frequency is ignored. Choose SDROxide above to use it.';
+  if(S.src&&S.link&&!S.ptt)t+=(t?'. ':'')+'This source does not report whether the rig transmits: no RX/TX mark and no protection while sending.';
+  if(S.tx)t+=(t?'. ':'')+'The rig is transmitting, antenna changes wait.';
+  if(S.tx&&!(S.swr>0)&&(S.src!==2||S.swrna))t+=(t?'. ':'')+'This source reports no SWR.';
+  $('srcState').textContent=t;
 }
 
 function verNum(v){const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(v||'');return m?[+m[1],+m[2],+m[3]]:null;}
@@ -276,6 +324,16 @@ function build(){
     r.innerHTML='<label class="l">'+BANDS[j]+'m</label><select id="bd'+j+'"></select>';
     br.appendChild(r);
   }
+  const lr=$('limRows');
+  for(let j=0;j<12;j++){
+    const r=document.createElement('div');r.className='row';
+    r.innerHTML='<label class="l">'+BANDS[j]+'m</label><input type="number" id="lo'+j+'" min="0" max="999999" style="width:5.5rem;flex:none"> <input type="number" id="hi'+j+'" min="0" max="999999" style="width:5.5rem;flex:none">';
+    lr.appendChild(r);
+    r.querySelectorAll('input').forEach(e=>e.oninput=()=>{$('region').value='c';});
+  }
+  $('region').onchange=()=>{const p=REGIONS[$('region').value];if(p)setLimits(p.lo,p.hi);};
+  $('src').onchange=srcView;
+  $('rhost').oninput=function(){this.value=this.value.replace(/[^A-Za-z0-9.:_-]/g,'');};
   const t=$('trx');
   TRX.forEach(x=>{const o=document.createElement('option');o.value=x[1];o.textContent=x[0];t.appendChild(o);});
   bandOptions();
@@ -294,14 +352,22 @@ function bandOptions(){
   }
 }
 
+function setLimits(lo,hi){for(let j=0;j<12;j++){$('lo'+j).value=lo[j];$('hi'+j).value=hi[j];}}
+
 function fill(c){
   $('nAnt').value=c.n;
   for(let i=0;i<8;i++){$('nm'+i).value=c.names[i];$('ex'+i).checked=!!((c.tuneroff>>i)&1);}
   bandOptions();
   for(let j=0;j<12;j++)$('bd'+j).value=c.bands[j];
+  setLimits(c.lo,c.hi);
+  let reg='c';
+  for(const k in REGIONS)if(REGIONS[k].lo.join()===c.lo.join()&&REGIONS[k].hi.join()===c.hi.join())reg=k;
+  $('region').value=reg;
   const t=$('trx');
   if(![...t.options].some(o=>+o.value===c.trx)){const o=document.createElement('option');o.value=c.trx;o.textContent='Custom ('+c.trx+')';t.appendChild(o);}
   t.value=c.trx;
+  $('src').value=c.src;$('rhost').value=c.rhost;$('rport').value=c.rport;
+  srcView();
 }
 
 async function loadCfg(explicit){
@@ -315,10 +381,19 @@ async function save(){
   for(let i=0;i<8;i++)if(!$('nm'+i).value.trim()){msg('Every antenna needs a name',true);return;}
   const p=new URLSearchParams();
   p.set('n',n);p.set('trx',$('trx').value);
+  const sv=$('src').value,rp=+$('rport').value;
+  if(sv==='2'&&!$('rhost').value.trim()){msg('rigctld needs the address of the PC',true);return;}
+  if(!(rp>=1&&rp<=65535)){msg('The rigctld port must be 1 to 65535',true);return;}
+  p.set('src',sv);p.set('rhost',$('rhost').value.trim());p.set('rport',rp);
   let t=0;for(let i=0;i<8;i++)if($('ex'+i).checked)t|=1<<i;
   p.set('tuneroff',t);
   for(let i=0;i<8;i++)p.set('nm'+i,$('nm'+i).value.trim());
   for(let j=0;j<12;j++)p.set('b'+j,$('bd'+j).value);
+  for(let j=0;j<12;j++){
+    const lo=+$('lo'+j).value,hi=+$('hi'+j).value;
+    if(!(lo>=0&&hi>=lo)){msg('Band '+BANDS[j]+' m: the upper limit must not be below the lower one',true);return;}
+    p.set('lo'+j,lo);p.set('hi'+j,hi);
+  }
   try{fill(await call('/api/config',p.toString()));msg('Config sent to the unit');}
   catch(e){msg('Sending failed',true);}
 }
