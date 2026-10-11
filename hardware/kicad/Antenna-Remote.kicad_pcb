@@ -9629,7 +9629,7 @@
 				)
 			)
 		)
-		(property "Value" "ULN2803A"
+		(property "Value" "TBD62783A"
 			(at 3.81 22.65 0)
 			(layer "F.Fab")
 			(uuid "facfcf07-83f6-4885-b94f-5b854483d5d9")

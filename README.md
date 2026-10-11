@@ -116,12 +116,21 @@ Die Platine liegt unter `hardware/` (KiCad):
 
 - `kicad/` Projekt (Schaltplan, Leiterplatte), Stückliste und Netzliste
 - `production/` Gerber- und Bohrdateien, `BOM.xlsx`
-- `docs/` Schaltplan als PDF
-- `3d/` STEP-Modell
+- `docs/` Schaltplan als PDF, Anschlussplan des Amplitec-Kabels
+- `parts/` ESP32-DevKitC (Symbol, Footprint, 3D-Modell)
+- `3d/` STEP-Modell der Platine
+
+**Anschluss des Antennenumschalters (J1, DB9-Buchse):** Die Platine schaltet positiv. Die Relais des Amplitec-Umschalters hängen mit ihrem gemeinsamen Minus an Masse (Pin 3). Die Belegung folgt dem Plan von Amplitec (`hardware/docs/RSW(4)(6)8A1R_DSUB9_Connectors.pdf`). Antenne *n* schaltet das Relais `RLYn`:
+
+| DB9-Pin | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Signal | RLY8 | RLY7 | GND | RLY6 | RLY5 | RLY4 | RLY3 | RLY2 | RLY1 |
+
+Beim 8-fach-Umschalter sind alle Pins belegt. Der 6-fach braucht Pin 3 und 4 bis 9, der 4-fach Pin 3 und 6 bis 9. Das Kabel hat an beiden Enden einen 9-poligen Stecker (male), der Schirm liegt am Metallgehäuse. Amplitec empfiehlt 0,25 mm² bis 70 m und 0,5 mm² bis 100 m Länge sowie einen Test des fertigen Kabels.
 
 **Bekannte Fehler:**
 
-- Der Buzzer (BZ1) ist im Schaltplan nicht richtig angeschlossen, der ESP32-Pin muss getauscht werden. Die Firmware steuert noch keinen Buzzer an.
+- Der Buzzer (BZ1) ist im Schaltplan nicht richtig angeschlossen. Er hängt an GPIO 34, und der kann nur Eingang. Der Pin muss getauscht werden. Die Firmware steuert noch keinen Buzzer an.
 - Der Buzzer sitzt auf der Leiterplatte zu nah am Rand und muss etwas weiter nach innen.
 
 ## Lizenz

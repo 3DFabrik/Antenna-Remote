@@ -459,9 +459,9 @@
       <tstamps>f8b6a922-4641-4847-8201-7377a1bd1feb</tstamps>
     </comp>
     <comp ref="U3">
-      <value>ULN2803A</value>
+      <value>TBD62783A</value>
       <footprint>Package_DIP:DIP-18_W7.62mm_Socket</footprint>
-      <datasheet>https://www.reichelt.de/eight-darlington-arrays-dil-18-uln-2803a-p22085.html?&amp;nbc=1</datasheet>
+      <datasheet>http://toshiba.semicon-storage.com/info/docget.jsp?did=30523&amp;prodName=TBD62783APG</datasheet>
       <libsource lib="Transistor_Array" part="TBD62783A" description="8-Channel Source Type Transistor Array, TTL and CMOS compatible, 500mA, 50V, DIP-18/SOP-18/SSOP-18/SOIC-18W"/>
       <property name="Sheetname" value=""/>
       <property name="Sheetfile" value="Antenna-Remote.kicad_sch"/>
