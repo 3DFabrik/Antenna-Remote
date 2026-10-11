@@ -6,3 +6,4 @@ firmware/
 *.map
 .vscode/
 *.tmp
+.history/

@@ -102,6 +102,20 @@ git push origin v1.0.0
 
 Alternativ startet man *Actions → Release → Run workflow* und gibt die Version ein. Der Ablauf steht in `.github/workflows/release.yml`.
 
+## Hardware
+
+Die Platine liegt unter `hardware/` (KiCad):
+
+- `kicad/` Projekt (Schaltplan, Leiterplatte), Stückliste und Netzliste
+- `production/` Gerber- und Bohrdateien, `BOM.xlsx`
+- `docs/` Schaltplan als PDF
+- `3d/` STEP-Modell
+
+**Bekannte Fehler:**
+
+- Der Buzzer (BZ1) ist im Schaltplan nicht richtig angeschlossen, der ESP32-Pin muss getauscht werden. Die Firmware steuert noch keinen Buzzer an.
+- Der Buzzer sitzt auf der Leiterplatte zu nah am Rand und muss etwas weiter nach innen.
+
 ## Lizenz
 
 MIT, siehe `LICENSE`. Die Bibliothek TFT_eSPI unter `libraries/TFT_eSPI` hat ihre eigene Lizenz (`license.txt`).
