@@ -2,6 +2,8 @@
 
 Ein Antennenumschalter für bis zu acht Antennen auf einem ESP32. Er wählt die Antenne nach der Frequenz des Transceivers (Automatik) oder von Hand, zeigt alles auf einem Touch-Display und lässt sich über WLAN, Bluetooth und eine Weboberfläche bedienen. [SDROxide](https://github.com/3DFabrik/sdroxide) kann ihm die Frequenz direkt über WLAN schicken. Die Firmware ist eine Weiterentwicklung der Antenna Remote II.
 
+Gedacht ist die Einheit für die Fernumschalter von [Amplitec](https://www.amplitec.hu/r_sw_3000_4_way_eng.html) (SW:3000) mit vier, sechs oder acht Wegen. Sie schaltet positiv und passt damit zu Umschaltern mit gemeinsamer Masse. Die Anzahl der Antennen (bis zu acht) wird in den Einstellungen gewählt.
+
 Die Firmware-Version steht oben in der Weboberfläche. Ein Release-Build trägt den Tag als Version, ein lokaler Build seine Bauzeit.
 
 ## Was dazugehört
@@ -17,14 +19,20 @@ Die Firmware-Version steht oben in der Weboberfläche. Ein Release-Build trägt 
 | Display CS, DC, RST | 15, 2, 23 |
 | Touch CS | 21 |
 | Schieberegister CLR, A/B, CLK | 25, 26, 27 |
-| Tuner-Ausgang (extern / intern), Tune-Anforderung | 33, 32 |
+| Relais externer Tuner, Relais Tune-Anforderung | 33, 32 |
 
 Die Display-Pins stehen in `libraries/TFT_eSPI/User_Setup.h`. Beim ersten Start fragt das Display nach der Touch-Kalibrierung.
 
 ## Bedienung am Gerät
 
-- **Seite 1** zeigt Frequenz, Band und die Antennenliste. `AUTOMATIC MODE` schaltet zwischen Automatik und Handbetrieb um. Zwischen diesem Schalter und `MISC` stehen zwei Symbole für die Verbindung: im Bluetooth-Modus das Bluetooth-Zeichen (grün, solange ein Client verbunden ist), im WLAN-Modus die Signalstärke (drei Bögen) und ein Bildschirm-Symbol, das grün wird, solange SDROxide verbunden ist. Die Weboberfläche zeigt dasselbe oben rechts. Im Handbetrieb wählen UP und DN die Antenne. Hält man `ST` eine Sekunde, wird die aktuelle Antenne für das aktuelle Band gespeichert.
+- **Seite 1** zeigt Frequenz, Band und die Antennenliste. `AUTOMATIC MODE` schaltet zwischen Automatik und Handbetrieb um. Zwischen diesem Schalter und `MISC` stehen zwei Symbole für die Verbindung: im Bluetooth-Modus das Bluetooth-Zeichen (grün, solange ein Client verbunden ist), im WLAN-Modus die Signalstärke (drei Bögen) und ein Bildschirm-Symbol, das grün wird, solange SDROxide verbunden ist. Die Weboberfläche zeigt dasselbe oben rechts. Im Handbetrieb wählen UP und DN die Antenne. Hält man `ST` eine Sekunde, wird die aktuelle Antenne für das aktuelle Band gespeichert. Im Automatikmodus heißt dieselbe Taste `TU` und startet den Tuner, siehe unten.
 - **Seite 2** (`MISC`) zeigt die Verbindung: Modus, SSID, Status, IP, Signal, ob SDROxide verbunden ist, Antenne und Automatik. Hier wird auch der Verbindungsmodus eingestellt.
+
+## Tuner
+
+In den Einstellungen der Weboberfläche lässt sich pro Antenne das Häkchen `External Tuner` setzen. Ist es für die gewählte Antenne gesetzt, schaltet der Umschalter das erste Relais (GPIO 33) für den externen Tuner. Damit ist der Antennentuner des Transceivers abgeschaltet.
+
+Die Taste `TU` (Display, Automatikmodus) und `TUNING` (Weboberfläche) sind nur dann aktiv, wenn die gewählte Antenne diese Markierung hat. Sonst sind sie grau. Ein Druck löst über das zweite Relais (GPIO 32) für genau fünf Sekunden die Tune-Anforderung aus, auch wenn der Finger auf der Taste bleibt. Der Transceiver sendet dann ein Signal mit geringer Leistung, auf das sich der externe Tuner abstimmt. Während der Anforderung ist die Taste rot. Ein erneuter Druck bricht sie ab, ebenso ein Wechsel der Antenne oder des Modus.
 
 ## Verbindung: Bluetooth oder WLAN
 
