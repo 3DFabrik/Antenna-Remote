@@ -5008,7 +5008,7 @@
 			(uuid "012ff98f-63af-4454-bf0c-97621ede22e0")
 		)
 		(embedded_fonts no)
-		(model "U:/Hobby/Funkerei/Antennenumschalter/KicadParts/esp32_DevKitC/ESP32-DEVKITC-32D.step"
+		(model "${KIPRJMOD}/../parts/esp32_DevKitC/ESP32-DEVKITC-32D.step"
 			(offset
 				(xyz 0 -3 4)
 			)
